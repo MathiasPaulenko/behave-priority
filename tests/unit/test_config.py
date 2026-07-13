@@ -35,14 +35,6 @@ class TestDefaults:
         config = PriorityConfig()
         assert config.critical_tag == "critical"
 
-    def test_priority_tag_pattern_default(self) -> None:
-        config = PriorityConfig()
-        assert config.priority_tag_pattern == "priority({n})"
-
-    def test_feature_priority_tag_pattern_default(self) -> None:
-        config = PriorityConfig()
-        assert config.feature_priority_tag_pattern == "feature-priority({n})"
-
     def test_default_priority_default_999(self) -> None:
         config = PriorityConfig()
         assert config.default_priority == 999
@@ -113,8 +105,6 @@ class TestKwargs:
             stop_after_failures=5,
             stop_on_critical=True,
             critical_tag="critico",
-            priority_tag_pattern="prio({n})",
-            feature_priority_tag_pattern="fprio({n})",
             default_priority=500,
             report=True,
         )
@@ -124,8 +114,6 @@ class TestKwargs:
         assert config.stop_after_failures == 5
         assert config.stop_on_critical is True
         assert config.critical_tag == "critico"
-        assert config.priority_tag_pattern == "prio({n})"
-        assert config.feature_priority_tag_pattern == "fprio({n})"
         assert config.default_priority == 500
         assert config.report is True
 
@@ -169,9 +157,9 @@ class TestEquality:
 
 
 class TestFields:
-    def test_has_10_fields(self) -> None:
+    def test_has_8_fields(self) -> None:
         fields = dataclasses.fields(PriorityConfig)
-        assert len(fields) == 10
+        assert len(fields) == 8
 
     def test_field_names(self) -> None:
         fields = dataclasses.fields(PriorityConfig)
@@ -183,8 +171,6 @@ class TestFields:
             "stop_after_failures",
             "stop_on_critical",
             "critical_tag",
-            "priority_tag_pattern",
-            "feature_priority_tag_pattern",
             "default_priority",
             "report",
         }
@@ -205,4 +191,4 @@ class TestFields:
     def test_asdict_returns_all_fields(self) -> None:
         config = PriorityConfig()
         d: dict[str, Any] = dataclasses.asdict(config)
-        assert len(d) == 10
+        assert len(d) == 8
