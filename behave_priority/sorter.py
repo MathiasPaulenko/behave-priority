@@ -118,7 +118,8 @@ class ScenarioSorter:
 
         if self._config.priority_tag:
             tag = self._config.priority_tag.lstrip("@")
-            primary = 0 if tag in scenario_tags else 1
+            normalized = {t.lstrip("@").strip() for t in scenario_tags}
+            primary = 0 if tag in normalized else 1
         else:
             primary = 0
 

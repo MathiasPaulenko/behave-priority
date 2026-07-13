@@ -75,6 +75,20 @@ class TestParsePriority:
         with pytest.raises(PriorityParseError, match="Invalid priority tag"):
             parse_priority(["priority(1abc)"])
 
+    def test_at_prefix_priority(self) -> None:
+        assert parse_priority(["@priority(1)"]) == 1
+
+    def test_at_prefix_with_whitespace(self) -> None:
+        assert parse_priority(["  @priority(5)  "]) == 5
+
+    def test_at_prefix_malformed_raises(self) -> None:
+        with pytest.raises(PriorityParseError, match="Invalid priority tag"):
+            parse_priority(["@priority(abc)"])
+
+    def test_at_prefix_no_closing_paren_raises(self) -> None:
+        with pytest.raises(PriorityParseError, match="Invalid priority tag"):
+            parse_priority(["@priority(1"])
+
 
 class TestParseFeaturePriority:
     def test_normal_feature_priority(self) -> None:
@@ -116,6 +130,9 @@ class TestParseFeaturePriority:
     def test_feature_priority_float_raises(self) -> None:
         with pytest.raises(PriorityParseError, match="Invalid feature-priority tag"):
             parse_feature_priority(["feature-priority(2.5)"])
+
+    def test_at_prefix_feature_priority(self) -> None:
+        assert parse_feature_priority(["@feature-priority(3)"]) == 3
 
 
 class TestResolvePriority:
@@ -234,3 +251,15 @@ class TestIsCritical:
 
     def test_partial_match_not_critical(self) -> None:
         assert is_critical(["critical-path"]) is False
+
+    def test_at_prefix_critical_tag(self) -> None:
+        assert is_critical(["@critical"]) is True
+
+    def test_at_prefix_custom_critical_tag(self) -> None:
+        assert is_critical(["@critico"], critical_tag="critico") is True
+
+    def test_at_prefix_both_sides(self) -> None:
+        assert is_critical(["@critical"], critical_tag="@critical") is True
+
+    def test_whitespace_around_critical_tag(self) -> None:
+        assert is_critical(["  critical  "]) is True

@@ -22,6 +22,7 @@ class FakeFeature:
     filename: str
     tags: list[str] = field(default_factory=list)
     scenarios: list[FakeScenario] = field(default_factory=list)
+    run_items: list[FakeScenario] | None = None
 
 
 def make_feature(
@@ -368,3 +369,187 @@ class TestFeatureSortKey:
         )
         key = sorter._feature_sort_key(feature)
         assert key[0] == 1
+
+
+class TestSortWithRunItems:
+    def test_run_items_sorted_when_present(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(3)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        s3 = FakeScenario("mid", tags=["priority(2)"])
+        feature = FakeFeature(
+            name="F",
+            filename="f.feature",
+            scenarios=[s1, s2, s3],
+            run_items=[s1, s2, s3],
+        )
+        sorter.sort([feature])
+        assert feature.run_items == [s2, s3, s1]
+        assert feature.scenarios == [s2, s3, s1]
+
+    def test_run_items_none_falls_back_to_scenarios(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(3)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        feature = make_feature("F", scenarios=[s1, s2])
+        sorter.sort([feature])
+        assert feature.run_items is None
+        assert feature.scenarios == [s2, s1]
+
+    def test_run_items_different_from_scenarios(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(3)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        s3 = FakeScenario("mid", tags=["priority(2)"])
+        feature = FakeFeature(
+            name="F",
+            filename="f.feature",
+            scenarios=[s1, s2],
+            run_items=[s1, s2, s3],
+        )
+        sorter.sort([feature])
+        assert feature.run_items == [s2, s3, s1]
+        assert feature.scenarios == [s2, s1]
+
+    def test_feature_sort_key_uses_run_items(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(5)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        feature = FakeFeature(
+            name="F",
+            filename="f.feature",
+            scenarios=[s1],
+            run_items=[s1, s2],
+        )
+        key = sorter._feature_sort_key(feature)
+        assert key == (0, 1)
+
+
+class TestSortWithAtPrefix:
+    def test_priority_tag_with_at_prefix_in_scenario_tags(self) -> None:
+        config = PriorityConfig(priority_tag="smoke")
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("normal")
+        s2 = FakeScenario("smoke", tags=["@smoke"])
+        feature = make_feature("F", scenarios=[s1, s2])
+        sorter.sort([feature])
+        assert feature.scenarios[0] == s2
+
+    def test_priority_tag_with_at_prefix_in_config(self) -> None:
+        config = PriorityConfig(priority_tag="@smoke")
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("normal")
+        s2 = FakeScenario("smoke", tags=["smoke"])
+        feature = make_feature("F", scenarios=[s1, s2])
+        sorter.sort([feature])
+        assert feature.scenarios[0] == s2
+
+    def test_both_at_prefixed(self) -> None:
+        config = PriorityConfig(priority_tag="@smoke")
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("normal")
+        s2 = FakeScenario("smoke", tags=["@smoke"])
+        feature = make_feature("F", scenarios=[s1, s2])
+        sorter.sort([feature])
+        assert feature.scenarios[0] == s2
+
+
+class TestRealWorldScenarios:
+    def test_multiple_features_mixed_priorities(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        f1 = make_feature(
+            "Auth",
+            scenarios=[
+                FakeScenario("login", tags=["priority(2)"]),
+                FakeScenario("logout", tags=["priority(5)"]),
+            ],
+        )
+        f2 = make_feature(
+            "Payment",
+            scenarios=[
+                FakeScenario("checkout", tags=["priority(1)"]),
+                FakeScenario("refund", tags=["priority(3)"]),
+            ],
+        )
+        f3 = make_feature(
+            "Profile",
+            scenarios=[
+                FakeScenario("view", tags=["priority(4)"]),
+                FakeScenario("edit", tags=["priority(6)"]),
+            ],
+        )
+        result = sorter.sort([f3, f1, f2])
+        assert result[0] == f2
+        assert result[1] == f1
+        assert result[2] == f3
+        assert [s.name for s in f1.scenarios] == ["login", "logout"]
+        assert [s.name for s in f2.scenarios] == ["checkout", "refund"]
+        assert [s.name for s in f3.scenarios] == ["view", "edit"]
+
+    def test_smoke_first_then_priority_order(self) -> None:
+        config = PriorityConfig(order=True, priority_tag="smoke")
+        sorter = ScenarioSorter(config)
+        f1 = make_feature(
+            "FeatureA",
+            scenarios=[
+                FakeScenario("smoke_test", tags=["smoke", "priority(5)"]),
+                FakeScenario("unit_test", tags=["priority(1)"]),
+            ],
+        )
+        f2 = make_feature(
+            "FeatureB",
+            scenarios=[
+                FakeScenario("integration", tags=["priority(2)"]),
+            ],
+        )
+        result = sorter.sort([f2, f1])
+        assert result[0] == f1
+        assert f1.scenarios[0].name == "smoke_test"
+
+    def test_all_same_priority_preserves_order(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        scenarios = [
+            FakeScenario(f"s{i}", tags=["priority(1)"]) for i in range(10)
+        ]
+        feature = make_feature("F", scenarios=scenarios)
+        sorter.sort([feature])
+        assert [s.name for s in feature.scenarios] == [f"s{i}" for i in range(10)]
+
+    def test_feature_with_feature_priority_and_scenario_override(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        f1 = make_feature(
+            "HighFeature",
+            tags=["feature-priority(1)"],
+            scenarios=[
+                FakeScenario("override", tags=["priority(10)"]),
+                FakeScenario("inherits", tags=[]),
+            ],
+        )
+        f2 = make_feature(
+            "LowFeature",
+            tags=["feature-priority(5)"],
+            scenarios=[FakeScenario("low", tags=["priority(3)"])],
+        )
+        result = sorter.sort([f2, f1])
+        assert result[0] == f1
+        assert f1.scenarios[0].name == "inherits"
+        assert f1.scenarios[1].name == "override"
+
+    def test_empty_features_and_empty_scenarios_mixed(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        f1 = make_feature("Empty", scenarios=[])
+        f2 = make_feature(
+            "HasOne",
+            scenarios=[FakeScenario("s", tags=["priority(1)"])],
+        )
+        f3 = make_feature("AlsoEmpty", scenarios=[])
+        result = sorter.sort([f1, f2, f3])
+        assert result[0] == f2

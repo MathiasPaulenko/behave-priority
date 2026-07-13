@@ -55,3 +55,53 @@ def test_returncode_zero_on_all_pass(run_behave: object) -> None:
         feature_content=FEATURE,
     )
     assert result.returncode == 0
+
+
+FEATURE_A = """\
+Feature: Feature A
+
+  @priority(2)
+  Scenario: Auth login
+    Given a passing step
+
+  @priority(5)
+  Scenario: Auth logout
+    Given a passing step
+"""
+
+FEATURE_B = """\
+Feature: Feature B
+
+  @priority(1)
+  Scenario: Payment checkout
+    Given a passing step
+
+  @priority(3)
+  Scenario: Payment refund
+    Given a passing step
+"""
+
+
+def test_multiple_features_ordered_by_best_scenario(run_behave: object) -> None:
+    result = run_behave(  # type: ignore[operator]
+        env_py=ENV,
+        feature_content=FEATURE_A,
+        extra_features={"feature_b.feature": FEATURE_B},
+    )
+    names = result.scenario_names
+    assert names == [
+        "Payment checkout",
+        "Payment refund",
+        "Auth login",
+        "Auth logout",
+    ]
+
+
+def test_multiple_features_all_pass(run_behave: object) -> None:
+    result = run_behave(  # type: ignore[operator]
+        env_py=ENV,
+        feature_content=FEATURE_A,
+        extra_features={"feature_b.feature": FEATURE_B},
+    )
+    assert len(result.passed_scenarios) == 4
+    assert len(result.failed_scenarios) == 0

@@ -37,7 +37,7 @@ def parse_priority(tags: list[str]) -> int | None:
         PriorityParseError: If a priority tag exists but has invalid syntax.
     """
     for tag in tags:
-        tag = tag.strip()
+        tag = tag.strip().lstrip("@")
         if not tag.startswith("priority("):
             continue
         match = _PRIORITY_RE.match(tag)
@@ -63,7 +63,7 @@ def parse_feature_priority(tags: list[str]) -> int | None:
             syntax.
     """
     for tag in tags:
-        tag = tag.strip()
+        tag = tag.strip().lstrip("@")
         if not tag.startswith("feature-priority("):
             continue
         match = _FEATURE_PRIORITY_RE.match(tag)

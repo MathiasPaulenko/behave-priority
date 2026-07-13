@@ -114,11 +114,15 @@ def run_behave(tmp_path: Path) -> Callable[..., BehaveResult]:
         feature_content: str,
         steps_py: str = "",
         feature_filename: str = "test.feature",
+        extra_features: dict[str, str] | None = None,
     ) -> BehaveResult:
         features_dir = tmp_path / "features"
         features_dir.mkdir(exist_ok=True)
         (features_dir / "environment.py").write_text(env_py)
         (features_dir / feature_filename).write_text(feature_content)
+        if extra_features:
+            for fname, content in extra_features.items():
+                (features_dir / fname).write_text(content)
         steps_dir = features_dir / "steps"
         steps_dir.mkdir(exist_ok=True)
         (steps_dir / "steps.py").write_text(steps_py or DEFAULT_STEPS)
