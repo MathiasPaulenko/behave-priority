@@ -169,6 +169,7 @@ class PriorityReport:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize report to a dictionary."""
+        summary = self.summary()
         return {
             "entries": [
                 {
@@ -183,15 +184,15 @@ class PriorityReport:
                 for e in self._entries
             ],
             "summary": {
-                "total": self.summary().total,
-                "passed": self.summary().passed,
-                "failed": self.summary().failed,
-                "skipped": self.summary().skipped,
-                "undefined": self.summary().undefined,
-                "critical_total": self.summary().critical_total,
-                "critical_passed": self.summary().critical_passed,
-                "critical_failed": self.summary().critical_failed,
-                "total_duration": self.summary().total_duration,
-                "skipped_duration": self.summary().skipped_duration,
+                "total": summary.total,
+                "passed": summary.passed,
+                "failed": summary.failed,
+                "skipped": summary.skipped,
+                "undefined": summary.undefined,
+                "critical_total": summary.critical_total,
+                "critical_passed": summary.critical_passed,
+                "critical_failed": summary.critical_failed,
+                "total_duration": summary.total_duration,
+                "skipped_duration": summary.skipped_duration,
             },
         }
