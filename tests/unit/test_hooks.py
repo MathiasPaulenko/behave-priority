@@ -148,42 +148,6 @@ class TestCheckFailFast:
         assert state.check_fail_fast() is True
 
 
-class TestRecordResult:
-    def test_records_passed(self) -> None:
-        state = make_state()
-        state.record_result(id(object()), "passed", 1.0)
-        assert state.executed_count == 1
-        assert state.failed_count == 0
-        assert state.should_stop is False
-
-    def test_records_failed(self) -> None:
-        state = make_state()
-        state.record_result(id(object()), "failed", 1.0)
-        assert state.executed_count == 1
-        assert state.failed_count == 1
-
-    def test_records_multiple(self) -> None:
-        state = make_state()
-        state.record_result(id(object()), "passed", 1.0)
-        state.record_result(id(object()), "failed", 2.0)
-        state.record_result(id(object()), "failed", 3.0)
-        assert state.executed_count == 3
-        assert state.failed_count == 2
-
-    def test_triggers_fail_fast(self) -> None:
-        state = make_state(PriorityConfig(stop_after_failures=2))
-        state.record_result(id(object()), "failed", 1.0)
-        assert state.should_stop is False
-        state.record_result(id(object()), "failed", 1.0)
-        assert state.should_stop is True
-
-    def test_skipped_does_not_increment_failed(self) -> None:
-        state = make_state()
-        state.record_result(id(object()), "skipped", 0.0)
-        assert state.executed_count == 1
-        assert state.failed_count == 0
-
-
 class TestSetupPriority:
     def test_sets_up_state_on_context(self) -> None:
         s1 = FakeScenario("s1", tags=["priority(1)"])
@@ -313,22 +277,14 @@ class TestBeforeScenarioHook:
         before_scenario_hook(ctx, scenario)
         assert scenario.skipped is False
 
-    def test_no_skip_method_clears_scenarios(self) -> None:
+    def test_should_stop_increments_skipped_count(self) -> None:
         state = make_state()
         state.should_stop = True
-        s1 = FakeScenario("s1")
-        feature = FakeFeature("F", "f.feature", scenarios=[s1])
-        runner = FakeRunner(features=[feature])
-        ctx = FakeContext(_runner=runner, _priority_state=state)
-
-        class NoSkipScenario:
-            name = "noskip"
-            tags: list[str] = []
-            status = "passed"
-            duration = 0.0
-
-        before_scenario_hook(ctx, NoSkipScenario())
-        assert runner.features[0].scenarios == []
+        ctx = FakeContext(_priority_state=state)
+        scenario = FakeScenario("s")
+        before_scenario_hook(ctx, scenario)
+        assert state.skipped_count == 1
+        assert scenario.skipped is True
 
 
 class TestAfterScenarioHook:
@@ -342,7 +298,7 @@ class TestAfterScenarioHook:
         ctx = FakeContext(_priority_state=state)
         scenario = FakeScenario("s", status="passed", duration=1.5)
         after_scenario_hook(ctx, scenario)
-        assert state.executed_count == 0
+        assert state.executed_count == 1
         assert state.failed_count == 0
         entries = state.report._entries
         assert len(entries) == 1

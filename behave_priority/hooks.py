@@ -26,20 +26,6 @@ class PriorityState:
     skipped_count: int = 0
     priority_map: dict[int, int] = field(default_factory=dict)
 
-    def record_result(
-        self,
-        scenario_id: int,
-        status: str,
-        duration: float,
-    ) -> None:
-        """Record a scenario result and check fail-fast conditions."""
-        self.executed_count += 1
-
-        if status == "failed":
-            self.failed_count += 1
-
-        self.should_stop = self.check_fail_fast()
-
     def check_fail_fast(self) -> bool:
         """Check if fail-fast conditions are met."""
         if (
@@ -126,16 +112,9 @@ def before_scenario_hook(context: Any, scenario: Any) -> None:
         return
 
     if state.should_stop:
+        state.skipped_count += 1
         if hasattr(scenario, "skip"):
             scenario.skip("fail-fast triggered")
-        else:
-            runner = getattr(context, "_runner", None)
-            if runner is not None:
-                for feature in getattr(runner, "features", []):
-                    feature.scenarios = []
-                    run_items = getattr(feature, "run_items", None)
-                    if run_items is not None:
-                        feature.run_items = []
 
 
 def after_scenario_hook(context: Any, scenario: Any) -> None:
@@ -168,6 +147,8 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
         duration=duration,
         is_critical=is_crit,
     )
+
+    state.executed_count += 1
 
     if status == "failed":
         state.failed_count += 1
