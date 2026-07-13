@@ -11,7 +11,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ReportEntry:
-    """Single scenario entry in the execution report."""
+    """Single scenario entry in the execution report.
+
+    Attributes:
+        index: 1-based position in execution order.
+        feature_name: Name or filename of the parent feature.
+        scenario_name: Display name of the scenario.
+        priority: Resolved priority value.
+        status: Execution status (``"passed"``, ``"failed"``, etc.).
+        duration: Execution time in seconds.
+        is_critical: Whether the scenario has the critical tag.
+    """
 
     index: int
     feature_name: str
@@ -24,7 +34,20 @@ class ReportEntry:
 
 @dataclass(frozen=True, slots=True)
 class ReportSummary:
-    """Aggregate statistics from the report."""
+    """Aggregate statistics from the report.
+
+    Attributes:
+        total: Total number of recorded scenarios.
+        passed: Number of passed scenarios.
+        failed: Number of failed scenarios.
+        skipped: Number of skipped scenarios.
+        undefined: Number of undefined scenarios.
+        critical_total: Total number of critical scenarios.
+        critical_passed: Number of passed critical scenarios.
+        critical_failed: Number of failed critical scenarios.
+        total_duration: Sum of all scenario durations in seconds.
+        skipped_duration: Sum of skipped scenario durations in seconds.
+    """
 
     total: int
     passed: int
@@ -39,12 +62,20 @@ class ReportSummary:
 
     @property
     def time_saved(self) -> float:
-        """Alias for skipped_duration."""
+        """Alias for skipped_duration.
+
+        Returns:
+            Total duration of skipped scenarios in seconds.
+        """
         return self.skipped_duration
 
     @property
     def pass_rate(self) -> float:
-        """Percentage of passed scenarios (excluding skipped)."""
+        """Percentage of passed scenarios excluding skipped.
+
+        Returns:
+            Pass rate as a percentage (0.0 to 100.0).
+        """
         executed = self.total - self.skipped
         if executed == 0:
             return 0.0
@@ -55,6 +86,11 @@ class PriorityReport:
     """Collects and renders execution order with priorities and timing."""
 
     def __init__(self, config: PriorityConfig) -> None:
+        """Initialize the report collector.
+
+        Args:
+            config: Configuration that controls report behavior.
+        """
         self._config = config
         self._entries: list[ReportEntry] = []
 
@@ -68,7 +104,16 @@ class PriorityReport:
         duration: float,
         is_critical: bool,
     ) -> None:
-        """Record a scenario execution result."""
+        """Record a scenario execution result.
+
+        Args:
+            scenario_name: Display name of the scenario.
+            feature_name: Name or filename of the parent feature.
+            priority: Resolved priority value.
+            status: Execution status (``"passed"``, ``"failed"``, etc.).
+            duration: Execution time in seconds.
+            is_critical: Whether the scenario has the critical tag.
+        """
         entry = ReportEntry(
             index=len(self._entries) + 1,
             feature_name=feature_name,
@@ -81,7 +126,11 @@ class PriorityReport:
         self._entries.append(entry)
 
     def render(self) -> str:
-        """Render the full report as a formatted string."""
+        """Render the full report as a formatted string.
+
+        Returns:
+            A human-readable report with a table of entries and summary.
+        """
         if not self._entries:
             return (
                 "Priority Execution Report\n"
@@ -139,7 +188,11 @@ class PriorityReport:
         return "\n".join(lines) + "\n"
 
     def summary(self) -> ReportSummary:
-        """Compute aggregate statistics."""
+        """Compute aggregate statistics.
+
+        Returns:
+            A ``ReportSummary`` with counts and durations.
+        """
         total = len(self._entries)
         passed = sum(1 for e in self._entries if e.status == "passed")
         failed = sum(1 for e in self._entries if e.status == "failed")
@@ -168,7 +221,11 @@ class PriorityReport:
         )
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize report to a dictionary."""
+        """Serialize report to a dictionary.
+
+        Returns:
+            A dict with ``"entries"`` and ``"summary"`` keys.
+        """
         summary = self.summary()
         return {
             "entries": [

@@ -15,7 +15,11 @@ _FEATURE_PRIORITY_RE = re.compile(r"^feature-priority\(\s*(-?\d+)\s*\)$")
 
 
 class Taggable(Protocol):
-    """Protocol for objects with tags (Scenario, Feature)."""
+    """Protocol for objects with tags (Scenario, Feature).
+
+    Attributes:
+        tags: List of tag strings as behave stores them (without '@' prefix).
+    """
 
     tags: list[str]
 
@@ -47,6 +51,16 @@ def parse_feature_priority(tags: list[str]) -> int | None:
     """Parse @feature-priority(N) from a tag list.
 
     Same semantics as parse_priority but for feature-level tags.
+
+    Args:
+        tags: List of tag strings (without '@' prefix, as behave stores them).
+
+    Returns:
+        Priority integer, or None if no feature-priority tag found.
+
+    Raises:
+        PriorityParseError: If a feature-priority tag exists but has invalid
+            syntax.
     """
     for tag in tags:
         tag = tag.strip()
@@ -67,6 +81,14 @@ def resolve_priority(
     """Resolve effective priority for a scenario.
 
     Precedence: scenario > feature > default.
+
+    Args:
+        scenario_tags: Tags on the scenario (without '@' prefix).
+        feature_tags: Tags on the parent feature (without '@' prefix).
+        config: Configuration containing the default priority fallback.
+
+    Returns:
+        The effective priority integer for the scenario.
     """
     scenario_priority = parse_priority(scenario_tags)
     if scenario_priority is not None:
@@ -80,6 +102,18 @@ def resolve_priority(
 
 
 def is_critical(tags: list[str], critical_tag: str = "critical") -> bool:
-    """Check if a tag list contains the critical tag."""
+    """Check if a tag list contains the critical tag.
+
+    Both the tags and ``critical_tag`` are normalized by stripping leading
+    '@' characters and whitespace before comparison.
+
+    Args:
+        tags: List of tag strings to search.
+        critical_tag: The tag name that marks a scenario as critical.
+            Defaults to ``"critical"``.
+
+    Returns:
+        True if the critical tag is present in the tag list.
+    """
     normalized = {t.lstrip("@").strip() for t in tags}
     return critical_tag.lstrip("@").strip() in normalized
