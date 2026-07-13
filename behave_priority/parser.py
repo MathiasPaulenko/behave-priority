@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
 _PRIORITY_RE = re.compile(r"^priority\(\s*(-?\d+)\s*\)$")
 _FEATURE_PRIORITY_RE = re.compile(r"^feature-priority\(\s*(-?\d+)\s*\)$")
-_INT_RE = re.compile(r"^-?\d+$")
 
 
 class Taggable(Protocol):
@@ -40,10 +39,7 @@ def parse_priority(tags: list[str]) -> int | None:
         match = _PRIORITY_RE.match(tag)
         if match:
             return int(match.group(1))
-        if tag.startswith("priority(") and tag.endswith(")"):
-            inner = tag[len("priority(") : -1].strip()
-            if not _INT_RE.match(inner):
-                raise PriorityParseError(f"Invalid priority tag: {tag}")
+        raise PriorityParseError(f"Invalid priority tag: {tag}")
     return None
 
 
@@ -59,12 +55,7 @@ def parse_feature_priority(tags: list[str]) -> int | None:
         match = _FEATURE_PRIORITY_RE.match(tag)
         if match:
             return int(match.group(1))
-        if tag.startswith("feature-priority(") and tag.endswith(")"):
-            inner = tag[len("feature-priority(") : -1].strip()
-            if not _INT_RE.match(inner):
-                raise PriorityParseError(
-                    f"Invalid feature-priority tag: {tag}"
-                )
+        raise PriorityParseError(f"Invalid feature-priority tag: {tag}")
     return None
 
 
@@ -90,4 +81,5 @@ def resolve_priority(
 
 def is_critical(tags: list[str], critical_tag: str = "critical") -> bool:
     """Check if a tag list contains the critical tag."""
-    return critical_tag in tags
+    normalized = {t.lstrip("@").strip() for t in tags}
+    return critical_tag.lstrip("@").strip() in normalized
