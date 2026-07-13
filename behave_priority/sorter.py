@@ -82,11 +82,12 @@ class ScenarioSorter:
 
     def _feature_sort_key(self, feature: FeatureLike) -> tuple[int, int]:
         """Compute sort key for a feature (based on its best scenario)."""
-        if not feature.scenarios:
+        items: list[ScenarioLike] = getattr(feature, "run_items", None) or feature.scenarios
+        if not items:
             return (1, self._config.default_priority)
 
         best = min(
             self._sort_key(s.tags, feature.tags)
-            for s in feature.scenarios
+            for s in items
         )
         return best
