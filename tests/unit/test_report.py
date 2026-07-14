@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 
+import pytest
+
 from behave_priority.config import PriorityConfig
 from behave_priority.report import PriorityReport, ReportEntry, ReportSummary
 
@@ -72,13 +74,29 @@ class TestReportEntry:
 
 
 class TestReportSummary:
-    def test_time_saved_alias(self) -> None:
+    def test_time_saved_defaults_to_zero(self) -> None:
         s = ReportSummary(
             total=10, passed=5, failed=3, skipped=2, undefined=0,
             critical_total=1, critical_passed=1, critical_failed=0,
-            total_duration=100.0, skipped_duration=20.0,
+            total_duration=100.0, skipped_duration=0.0,
         )
-        assert s.time_saved == 20.0
+        assert s.time_saved == 0.0
+
+    def test_time_saved_zero_when_no_skipped(self) -> None:
+        s = ReportSummary(
+            total=5, passed=5, failed=0, skipped=0, undefined=0,
+            critical_total=0, critical_passed=0, critical_failed=0,
+            total_duration=50.0, skipped_duration=0.0,
+        )
+        assert s.time_saved == 0.0
+
+    def test_time_saved_zero_when_all_skipped(self) -> None:
+        s = ReportSummary(
+            total=5, passed=0, failed=0, skipped=5, undefined=0,
+            critical_total=0, critical_passed=0, critical_failed=0,
+            total_duration=0.0, skipped_duration=0.0,
+        )
+        assert s.time_saved == 0.0
 
     def test_pass_rate_all_passed(self) -> None:
         s = ReportSummary(
@@ -347,6 +365,65 @@ class TestRender:
         output = report.render()
         assert "..." in output
 
+    def test_render_short_names_no_truncation(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, feature="Auth", name="Login")
+        output = report.render()
+        assert "Auth" in output
+        assert "Login" in output
+        assert "..." not in output
+
+    def test_render_dynamic_width_fits_content(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, feature="MyFeature", name="MyScenario")
+        output = report.render()
+        assert "MyFeature" in output
+        assert "MyScenario" in output
+
+    def test_render_width_capped_at_40(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, feature="F" * 100, name="S" * 100)
+        output = report.render()
+        assert "..." in output
+        for line in output.split("\n"):
+            assert len(line) < 120
+
+    def test_render_truncate_preserves_short_names(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, feature="AB", name="CD")
+        output = report.render()
+        assert "AB" in output
+        assert "CD" in output
+
+    def test_render_mixed_short_and_long_names(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, feature="Short", name="S")
+        record_scenario(report, feature="X" * 60, name="Y" * 60)
+        output = report.render()
+        assert "Short" in output
+        assert "..." in output
+
+    def test_render_short_names_header_aligned(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, feature="AB", name="CD")
+        output = report.render()
+        lines = output.split("\n")
+        header_line = [ln for ln in lines if ln.startswith("  #")][0]
+        data_line = [ln for ln in lines if "AB" in ln and "CD" in ln][0]
+        assert len(header_line) == len(data_line)
+
+    def test_truncate_fits(self) -> None:
+        assert PriorityReport._truncate("hello", 10) == "hello"
+
+    def test_truncate_exact_fit(self) -> None:
+        assert PriorityReport._truncate("hello", 5) == "hello"
+
+    def test_truncate_with_ellipsis(self) -> None:
+        assert PriorityReport._truncate("hello world", 8) == "hello..."
+
+    def test_truncate_small_width(self) -> None:
+        assert PriorityReport._truncate("hello", 3) == "hel"
+
     def test_render_ends_with_newline(self) -> None:
         report = PriorityReport(make_config())
         record_scenario(report)
@@ -405,9 +482,232 @@ class TestToDict:
         assert s["skipped"] == 1
         assert s["total_duration"] == 3.5
         assert s["skipped_duration"] == 0.5
+        assert s["pass_rate"] == 50.0
+        assert s["time_saved"] == pytest.approx(1.5)
 
     def test_dict_has_entries_and_summary_keys(self) -> None:
         report = PriorityReport(make_config())
         d = report.to_dict()
         assert "entries" in d
         assert "summary" in d
+
+    def test_dict_includes_pass_rate(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed")
+        record_scenario(report, status="passed")
+        record_scenario(report, status="failed")
+        d = report.to_dict()
+        assert d["summary"]["pass_rate"] == pytest.approx(66.67, rel=1e-2)
+
+    def test_dict_includes_time_saved(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=2.0)
+        record_scenario(report, status="skipped", duration=0.0)
+        d = report.to_dict()
+        assert d["summary"]["time_saved"] == pytest.approx(2.0)
+
+    def test_dict_pass_rate_zero_when_all_skipped(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="skipped")
+        record_scenario(report, status="skipped")
+        d = report.to_dict()
+        assert d["summary"]["pass_rate"] == 0.0
+
+    def test_dict_pass_rate_zero_when_empty(self) -> None:
+        report = PriorityReport(make_config())
+        d = report.to_dict()
+        assert d["summary"]["pass_rate"] == 0.0
+        assert d["summary"]["time_saved"] == 0.0
+
+
+class TestToJson:
+    """Tests for PriorityReport.to_json()."""
+
+    def test_empty_report_json(self) -> None:
+        report = PriorityReport(make_config())
+        import json
+
+        data = json.loads(report.to_json())
+        assert data["entries"] == []
+        assert data["summary"]["total"] == 0
+
+    def test_json_contains_entries(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="Alpha", status="passed")
+        record_scenario(report, name="Beta", status="failed")
+        import json
+
+        data = json.loads(report.to_json())
+        assert len(data["entries"]) == 2
+        assert data["entries"][0]["scenario_name"] == "Alpha"
+        assert data["entries"][1]["scenario_name"] == "Beta"
+
+    def test_json_contains_summary(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed")
+        record_scenario(report, status="failed")
+        record_scenario(report, status="skipped")
+        import json
+
+        data = json.loads(report.to_json())
+        assert data["summary"]["total"] == 3
+        assert data["summary"]["passed"] == 1
+        assert data["summary"]["failed"] == 1
+        assert data["summary"]["skipped"] == 1
+
+    def test_json_compact_mode(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="Alpha")
+        compact = report.to_json(indent=0)
+        assert "\n" not in compact
+
+    def test_json_pretty_mode(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="Alpha")
+        pretty = report.to_json(indent=2)
+        assert "\n" in pretty
+
+
+class TestToCsv:
+    """Tests for PriorityReport.to_csv()."""
+
+    def test_empty_report_csv(self) -> None:
+        report = PriorityReport(make_config())
+        csv_output = report.to_csv()
+        lines = csv_output.strip().splitlines()
+        assert len(lines) == 1
+        assert "index" in lines[0]
+        assert "scenario_name" in lines[0]
+
+    def test_csv_contains_entries(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="Alpha", status="passed", duration=1.5)
+        record_scenario(report, name="Beta", status="failed", duration=0.5)
+        csv_output = report.to_csv()
+        lines = csv_output.strip().splitlines()
+        assert len(lines) == 3
+        assert "Alpha" in lines[1]
+        assert "Beta" in lines[2]
+        assert "passed" in lines[1]
+        assert "failed" in lines[2]
+
+    def test_csv_header_columns(self) -> None:
+        report = PriorityReport(make_config())
+        csv_output = report.to_csv()
+        header = csv_output.splitlines()[0]
+        assert "index" in header
+        assert "feature_name" in header
+        assert "scenario_name" in header
+        assert "priority" in header
+        assert "status" in header
+        assert "duration" in header
+        assert "is_critical" in header
+
+    def test_csv_includes_critical_flag(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="Critical", is_critical=True)
+        record_scenario(report, name="Normal", is_critical=False)
+        csv_output = report.to_csv()
+        lines = csv_output.strip().splitlines()
+        assert ",true" in lines[1]
+        assert ",false" in lines[2]
+
+
+class TestReportFormatConfig:
+    """Tests for report_format validation in PriorityConfig."""
+
+    def test_default_format_is_text(self) -> None:
+        config = PriorityConfig()
+        assert config.report_format == "text"
+
+    def test_json_format_accepted(self) -> None:
+        config = PriorityConfig(report_format="json")
+        assert config.report_format == "json"
+
+    def test_csv_format_accepted(self) -> None:
+        config = PriorityConfig(report_format="csv")
+        assert config.report_format == "csv"
+
+    def test_invalid_format_rejected(self) -> None:
+        with pytest.raises(ValueError, match="report_format"):
+            PriorityConfig(report_format="xml")  # type: ignore[arg-type]
+
+
+class TestTimeSavedEstimation:
+    """Tests for priority-bucketed time_saved estimation."""
+
+    def test_zero_when_no_skipped(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=1.0)
+        record_scenario(report, status="failed", duration=2.0)
+        assert report.summary().time_saved == 0.0
+
+    def test_zero_when_no_executed(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="skipped", duration=0.0)
+        record_scenario(report, status="skipped", duration=0.0)
+        assert report.summary().time_saved == 0.0
+
+    def test_zero_when_empty(self) -> None:
+        report = PriorityReport(make_config())
+        assert report.summary().time_saved == 0.0
+
+    def test_same_bucket_uses_bucket_avg(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=2.0, priority=1)
+        record_scenario(report, status="passed", duration=4.0, priority=50)
+        record_scenario(report, status="skipped", duration=0.0, priority=10)
+        s = report.summary()
+        assert s.time_saved == pytest.approx(3.0)
+
+    def test_different_buckets_use_own_avg(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=1.0, priority=1)
+        record_scenario(report, status="passed", duration=10.0, priority=200)
+        record_scenario(report, status="skipped", duration=0.0, priority=5)
+        record_scenario(report, status="skipped", duration=0.0, priority=250)
+        s = report.summary()
+        assert s.time_saved == pytest.approx(11.0)
+
+    def test_bucket_without_executed_falls_back_to_global(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=2.0, priority=1)
+        record_scenario(report, status="passed", duration=4.0, priority=2)
+        record_scenario(report, status="skipped", duration=0.0, priority=500)
+        s = report.summary()
+        global_avg = (2.0 + 4.0) / 2
+        assert s.time_saved == pytest.approx(global_avg)
+
+    def test_multiple_skipped_in_same_bucket(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=3.0, priority=1)
+        record_scenario(report, status="skipped", duration=0.0, priority=10)
+        record_scenario(report, status="skipped", duration=0.0, priority=20)
+        record_scenario(report, status="skipped", duration=0.0, priority=30)
+        s = report.summary()
+        assert s.time_saved == pytest.approx(9.0)
+
+    def test_mixed_buckets(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="passed", duration=2.0, priority=1)
+        record_scenario(report, status="passed", duration=8.0, priority=150)
+        record_scenario(report, status="skipped", duration=0.0, priority=50)
+        record_scenario(report, status="skipped", duration=0.0, priority=180)
+        record_scenario(report, status="skipped", duration=0.0, priority=999)
+        s = report.summary()
+        global_avg = (2.0 + 8.0) / 2
+        assert s.time_saved == pytest.approx(2.0 + 8.0 + global_avg)
+
+    def test_failed_scenarios_count_as_executed(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="failed", duration=5.0, priority=1)
+        record_scenario(report, status="skipped", duration=0.0, priority=10)
+        s = report.summary()
+        assert s.time_saved == pytest.approx(5.0)
+
+    def test_undefined_scenarios_count_as_executed(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, status="undefined", duration=3.0, priority=1)
+        record_scenario(report, status="skipped", duration=0.0, priority=10)
+        s = report.summary()
+        assert s.time_saved == pytest.approx(3.0)

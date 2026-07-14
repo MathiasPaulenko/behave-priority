@@ -56,6 +56,12 @@ class TestParsePriority:
     def test_priority_not_first_tag(self) -> None:
         assert parse_priority(["smoke", "regression", "priority(5)"]) == 5
 
+    def test_multiple_priority_tags_returns_min(self) -> None:
+        assert parse_priority(["priority(5)", "priority(1)"]) == 1
+
+    def test_multiple_priority_tags_with_negative(self) -> None:
+        assert parse_priority(["priority(3)", "priority(-1)"]) == -1
+
     def test_priority_with_other_paren_tags(self) -> None:
         assert parse_priority(["tag(1)", "priority(2)"]) == 2
 
@@ -63,9 +69,8 @@ class TestParsePriority:
         with pytest.raises(PriorityParseError, match="Invalid priority tag"):
             parse_priority(["priority(1.5)"])
 
-    def test_priority_plus_sign_raises(self) -> None:
-        with pytest.raises(PriorityParseError, match="Invalid priority tag"):
-            parse_priority(["priority(+1)"])
+    def test_priority_plus_sign_accepted(self) -> None:
+        assert parse_priority(["priority(+1)"]) == 1
 
     def test_priority_double_negative_raises(self) -> None:
         with pytest.raises(PriorityParseError, match="Invalid priority tag"):
@@ -223,6 +228,66 @@ class TestResolvePriority:
             scenario_tags=[],
             feature_tags=["priority(1)"],
             config=config,
+        )
+        assert result == 999
+
+    def test_rule_tags_provide_priority(self) -> None:
+        config = PriorityConfig()
+        result = resolve_priority(
+            scenario_tags=[],
+            feature_tags=[],
+            config=config,
+            rule_tags=["priority(5)"],
+        )
+        assert result == 5
+
+    def test_scenario_overrides_rule(self) -> None:
+        config = PriorityConfig()
+        result = resolve_priority(
+            scenario_tags=["priority(1)"],
+            feature_tags=[],
+            config=config,
+            rule_tags=["priority(5)"],
+        )
+        assert result == 1
+
+    def test_rule_overrides_feature(self) -> None:
+        config = PriorityConfig()
+        result = resolve_priority(
+            scenario_tags=[],
+            feature_tags=["feature-priority(10)"],
+            config=config,
+            rule_tags=["priority(3)"],
+        )
+        assert result == 3
+
+    def test_no_rule_tags_falls_back_to_feature(self) -> None:
+        config = PriorityConfig()
+        result = resolve_priority(
+            scenario_tags=[],
+            feature_tags=["feature-priority(7)"],
+            config=config,
+            rule_tags=None,
+        )
+        assert result == 7
+
+    def test_empty_rule_tags_falls_back_to_feature(self) -> None:
+        config = PriorityConfig()
+        result = resolve_priority(
+            scenario_tags=[],
+            feature_tags=["feature-priority(7)"],
+            config=config,
+            rule_tags=[],
+        )
+        assert result == 7
+
+    def test_no_rule_no_feature_uses_default(self) -> None:
+        config = PriorityConfig()
+        result = resolve_priority(
+            scenario_tags=[],
+            feature_tags=[],
+            config=config,
+            rule_tags=None,
         )
         assert result == 999
 

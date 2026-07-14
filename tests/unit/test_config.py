@@ -65,13 +65,13 @@ class TestKwargs:
         config = PriorityConfig(stop_after_failures=3)
         assert config.stop_after_failures == 3
 
-    def test_stop_after_failures_zero(self) -> None:
-        config = PriorityConfig(stop_after_failures=0)
-        assert config.stop_after_failures == 0
+    def test_stop_after_failures_zero_raises(self) -> None:
+        with pytest.raises(ValueError, match="stop_after_failures"):
+            PriorityConfig(stop_after_failures=0)
 
-    def test_stop_after_failures_negative(self) -> None:
-        config = PriorityConfig(stop_after_failures=-1)
-        assert config.stop_after_failures == -1
+    def test_stop_after_failures_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="stop_after_failures"):
+            PriorityConfig(stop_after_failures=-1)
 
     def test_stop_on_critical_true(self) -> None:
         config = PriorityConfig(stop_on_critical=True)
@@ -89,9 +89,9 @@ class TestKwargs:
         config = PriorityConfig(default_priority=0)
         assert config.default_priority == 0
 
-    def test_default_priority_negative(self) -> None:
-        config = PriorityConfig(default_priority=-5)
-        assert config.default_priority == -5
+    def test_default_priority_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="default_priority"):
+            PriorityConfig(default_priority=-5)
 
     def test_report_true(self) -> None:
         config = PriorityConfig(report=True)
@@ -116,6 +116,44 @@ class TestKwargs:
         assert config.critical_tag == "critico"
         assert config.default_priority == 500
         assert config.report is True
+
+
+class TestValidation:
+    def test_stop_after_failures_none_allowed(self) -> None:
+        config = PriorityConfig(stop_after_failures=None)
+        assert config.stop_after_failures is None
+
+    def test_stop_after_failures_positive_allowed(self) -> None:
+        config = PriorityConfig(stop_after_failures=1)
+        assert config.stop_after_failures == 1
+
+    def test_critical_tag_empty_raises(self) -> None:
+        with pytest.raises(ValueError, match="critical_tag"):
+            PriorityConfig(critical_tag="")
+
+    def test_priority_tag_empty_raises(self) -> None:
+        with pytest.raises(ValueError, match="priority_tag"):
+            PriorityConfig(priority_tag="")
+
+    def test_priority_tag_none_allowed(self) -> None:
+        config = PriorityConfig(priority_tag=None)
+        assert config.priority_tag is None
+
+    def test_default_priority_zero_allowed(self) -> None:
+        config = PriorityConfig(default_priority=0)
+        assert config.default_priority == 0
+
+    def test_default_priority_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="default_priority"):
+            PriorityConfig(default_priority=-1)
+
+    def test_stop_after_failures_zero_raises(self) -> None:
+        with pytest.raises(ValueError, match="stop_after_failures"):
+            PriorityConfig(stop_after_failures=0)
+
+    def test_stop_after_failures_negative_raises(self) -> None:
+        with pytest.raises(ValueError, match="stop_after_failures"):
+            PriorityConfig(stop_after_failures=-5)
 
 
 class TestImmutability:
@@ -157,9 +195,9 @@ class TestEquality:
 
 
 class TestFields:
-    def test_has_8_fields(self) -> None:
+    def test_has_10_fields(self) -> None:
         fields = dataclasses.fields(PriorityConfig)
-        assert len(fields) == 8
+        assert len(fields) == 10
 
     def test_field_names(self) -> None:
         fields = dataclasses.fields(PriorityConfig)
@@ -173,6 +211,8 @@ class TestFields:
             "critical_tag",
             "default_priority",
             "report",
+            "report_format",
+            "parallel_coord",
         }
         assert names == expected
 
@@ -191,4 +231,4 @@ class TestFields:
     def test_asdict_returns_all_fields(self) -> None:
         config = PriorityConfig()
         d: dict[str, Any] = dataclasses.asdict(config)
-        assert len(d) == 8
+        assert len(d) == 10

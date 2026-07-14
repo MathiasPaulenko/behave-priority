@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from behave_priority.config import PriorityConfig
 from behave_priority.sorter import ScenarioSorter
@@ -20,6 +21,14 @@ class FakeScenario:
 class FakeFeature:
     name: str | None
     filename: str
+    tags: list[str] = field(default_factory=list)
+    scenarios: list[FakeScenario] = field(default_factory=list)
+    run_items: list[Any] | None = None
+
+
+@dataclass
+class FakeRule:
+    name: str
     tags: list[str] = field(default_factory=list)
     scenarios: list[FakeScenario] = field(default_factory=list)
     run_items: list[FakeScenario] | None = None
@@ -553,3 +562,169 @@ class TestRealWorldScenarios:
         f3 = make_feature("AlsoEmpty", scenarios=[])
         result = sorter.sort([f1, f2, f3])
         assert result[0] == f2
+
+
+class TestSortStability:
+    def test_same_priority_preserves_order(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("first")
+        s2 = FakeScenario("second")
+        s3 = FakeScenario("third")
+        feature = make_feature("F", scenarios=[s1, s2, s3])
+        sorter.sort([feature])
+        assert feature.scenarios == [s1, s2, s3]
+
+    def test_outline_examples_stay_grouped(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        outline_a = FakeScenario("Login outline <row 1>")
+        outline_b = FakeScenario("Login outline <row 2>")
+        outline_c = FakeScenario("Login outline <row 3>")
+        high = FakeScenario("Smoke test", tags=["priority(1)"])
+        low = FakeScenario("Regression", tags=["priority(5)"])
+        feature = make_feature(
+            "F", scenarios=[outline_a, outline_b, outline_c, high, low]
+        )
+        sorter.sort([feature])
+        names = [s.name for s in feature.scenarios]
+        assert names == [
+            "Smoke test",
+            "Regression",
+            "Login outline <row 1>",
+            "Login outline <row 2>",
+            "Login outline <row 3>",
+        ]
+
+    def test_outline_with_same_tag_stays_grouped(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        outline_a = FakeScenario("Outline <a>", tags=["priority(2)"])
+        outline_b = FakeScenario("Outline <b>", tags=["priority(2)"])
+        outline_c = FakeScenario("Outline <c>", tags=["priority(2)"])
+        high = FakeScenario("High", tags=["priority(1)"])
+        feature = make_feature(
+            "F", scenarios=[outline_a, outline_b, outline_c, high]
+        )
+        sorter.sort([feature])
+        names = [s.name for s in feature.scenarios]
+        assert names == ["High", "Outline <a>", "Outline <b>", "Outline <c>"]
+
+    def test_two_outlines_same_priority_stay_grouped(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        o1a = FakeScenario("Outline1 <a>")
+        o1b = FakeScenario("Outline1 <b>")
+        o2a = FakeScenario("Outline2 <a>")
+        o2b = FakeScenario("Outline2 <b>")
+        feature = make_feature(
+            "F", scenarios=[o1a, o1b, o2a, o2b]
+        )
+        sorter.sort([feature])
+        names = [s.name for s in feature.scenarios]
+        assert names == ["Outline1 <a>", "Outline1 <b>", "Outline2 <a>", "Outline2 <b>"]
+
+    def test_stability_with_mixed_priorities(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        a1 = FakeScenario("A1", tags=["priority(1)"])
+        b1 = FakeScenario("B1", tags=["priority(2)"])
+        b2 = FakeScenario("B2", tags=["priority(2)"])
+        b3 = FakeScenario("B3", tags=["priority(2)"])
+        a2 = FakeScenario("A2", tags=["priority(1)"])
+        feature = make_feature(
+            "F", scenarios=[b1, b2, a1, b3, a2]
+        )
+        sorter.sort([feature])
+        names = [s.name for s in feature.scenarios]
+        assert names == ["A1", "A2", "B1", "B2", "B3"]
+
+
+class TestRuleSupport:
+    def test_rule_inner_scenarios_sorted(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(5)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        rule = FakeRule("R1", run_items=[s1, s2], scenarios=[s1, s2])
+        feature = FakeFeature("F", "f.feature", run_items=[rule])
+        sorter.sort([feature])
+        rule_items = rule.run_items or []
+        assert [s.name for s in rule_items] == ["high", "low"]
+
+    def test_rule_tags_provide_priority(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("inherits_rule")
+        s2 = FakeScenario("explicit", tags=["priority(1)"])
+        rule = FakeRule("R", tags=["priority(3)"], run_items=[s1, s2], scenarios=[s1, s2])
+        feature = FakeFeature("F", "f.feature", run_items=[rule])
+        sorter.sort([feature])
+        rule_items = rule.run_items or []
+        assert [s.name for s in rule_items] == ["explicit", "inherits_rule"]
+
+    def test_rule_sorted_among_scenarios(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        standalone = FakeScenario("standalone_low", tags=["priority(9)"])
+        rule_s = FakeScenario("rule_high", tags=["priority(1)"])
+        rule = FakeRule("R", run_items=[rule_s], scenarios=[rule_s])
+        feature = FakeFeature(
+            "F", "f.feature",
+            run_items=[standalone, rule],
+            scenarios=[standalone, rule_s],
+        )
+        sorter.sort([feature])
+        items = feature.run_items or []
+        assert items[0] is rule
+        assert items[1] is standalone
+
+    def test_feature_with_rules_and_scenarios(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("s1", tags=["priority(3)"])
+        s2 = FakeScenario("s2", tags=["priority(1)"])
+        rule1 = FakeRule("R1", run_items=[s1], scenarios=[s1])
+        rule2 = FakeRule("R2", run_items=[s2], scenarios=[s2])
+        feature = FakeFeature(
+            "F", "f.feature",
+            run_items=[rule1, rule2],
+            scenarios=[s1, s2],
+        )
+        sorter.sort([feature])
+        items = feature.run_items or []
+        assert items[0] is rule2
+        assert items[1] is rule1
+
+    def test_rule_with_no_run_items(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        rule = FakeRule("R", run_items=None, scenarios=[])
+        feature = FakeFeature("F", "f.feature", run_items=[rule])
+        sorter.sort([feature])
+
+    def test_rule_scenarios_also_sorted(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(5)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        rule = FakeRule("R", scenarios=[s1, s2], run_items=None)
+        feature = FakeFeature("F", "f.feature", run_items=[rule])
+        sorter.sort([feature])
+        assert [s.name for s in rule.scenarios] == ["high", "low"]
+
+    def test_mixed_rule_and_scenario_in_run_items(self) -> None:
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+        plain = FakeScenario("plain", tags=["priority(2)"])
+        rule_s = FakeScenario("rule_s", tags=["priority(1)"])
+        rule = FakeRule("R", run_items=[rule_s], scenarios=[rule_s])
+        feature = FakeFeature(
+            "F", "f.feature",
+            run_items=[plain, rule],
+            scenarios=[plain, rule_s],
+        )
+        sorter.sort([feature])
+        items = feature.run_items or []
+        assert items[0] is rule
+        assert items[1] is plain

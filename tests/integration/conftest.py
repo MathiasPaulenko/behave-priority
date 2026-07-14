@@ -118,7 +118,13 @@ def run_behave(tmp_path: Path) -> Callable[..., BehaveResult]:
     ) -> BehaveResult:
         features_dir = tmp_path / "features"
         features_dir.mkdir(exist_ok=True)
-        (features_dir / "environment.py").write_text(env_py)
+        env_with_logging = (
+            "import logging, sys\n"
+            "logging.basicConfig(stream=sys.stdout, "
+            "level=logging.INFO, format='%(message)s')\n"
+            + env_py
+        )
+        (features_dir / "environment.py").write_text(env_with_logging)
         (features_dir / feature_filename).write_text(feature_content)
         if extra_features:
             for fname, content in extra_features.items():
