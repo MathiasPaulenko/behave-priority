@@ -2,8 +2,8 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-292%20passed-brightgreen.svg)]()
-[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-390%20passed-brightgreen.svg)]()
+[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen.svg)]()
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue.svg)]()
 [![ruff](https://img.shields.io/badge/ruff-passing-brightgreen.svg)]()
 
@@ -45,11 +45,49 @@ In CI, if critical tests fail, you waste time waiting for the full regression su
 - `stop_on_critical=True` — stops if any `@critical` scenario fails
 - Combines with `order=True`: run critical first, stop if they fail, skip regression
 
+### Parallel coordination
+
+When running with `behave --parallel=N`, each worker is a separate process. By default, fail-fast is per-worker only. To coordinate fail-fast across all workers:
+
+1. Set the `BEHAVE_PRIORITY_COORD_DIR` environment variable to a shared directory path
+2. Pass `parallel_coord=True` to `setup_priority`
+
+```bash
+export BEHAVE_PRIORITY_COORD_DIR=/tmp/behave_priority_coord
+behave --parallel=4
+```
+
+```python
+setup_priority(
+    context,
+    order=True,
+    stop_after_failures=3,
+    parallel_coord=True,
+)
+```
+
+Each worker writes its failure state to a JSON file in the coordination directory. `stop_after_failures` and `stop_on_critical` are evaluated globally across all workers. Call `cleanup_parallel_coord(context)` in `after_all` to remove the worker's file.
+
 ### Reporting
 
 - `report=True` — prints execution order with priorities and timing
+- `report_format="text"` (default) — human-readable table with summary
+- `report_format="json"` — machine-readable JSON with entries and summary
+- `report_format="csv"` — CSV with one row per scenario entry
 - Shows: scenario name, priority value, status (passed/failed/skipped), duration
 - Summary: how many critical passed, how many failed, total time saved by fail-fast
+- `time_saved` estimation uses priority-bucketed averages (scenarios grouped by priority range 0-99, 100-199, etc.)
+
+Example with JSON output for CI/CD integration:
+
+```python
+setup_priority(
+    context,
+    order=True,
+    report=True,
+    report_format="json",
+)
+```
 
 ## Installation
 
@@ -135,57 +173,43 @@ Configures priority execution in `before_all`. All parameters are optional.
 | `critical_tag` | `str` | `"critical"` | Tag name for critical scenarios |
 | `default_priority` | `int` | `999` | Priority for untagged scenarios |
 | `report` | `bool` | `False` | Print execution report after run |
+| `report_format` | `"text" \| "json" \| "csv"` | `"text"` | Output format for the report |
+| `parallel_coord` | `bool` | `False` | Enable cross-process fail-fast via `BEHAVE_PRIORITY_COORD_DIR` |
 
 ### Hook functions
 
 - `before_scenario_hook(context, scenario)` — skips scenario if fail-fast triggered
 - `after_scenario_hook(context, scenario)` — records result, checks fail-fast
 - `priority_report(context)` — prints execution report in `after_all`
+- `cleanup_parallel_coord(context)` — removes worker file from coordination directory in `after_all`
 
 ### `PriorityConfig`
 
 Immutable frozen dataclass with all configuration options. Can be constructed directly for advanced use cases.
 
-### `PriorityQueue[T]`
-
-Thread-safe priority queue using `heapq` with stable FIFO ordering.
-
-```python
-from behave_priority import PriorityQueue
-
-queue = PriorityQueue[Scenario]()
-queue.add(scenario_a, priority=1)
-queue.add(scenario_b, priority=3)
-queue.add(scenario_c, priority=1)  # FIFO with same priority
-
-next_scenario = queue.pop()   # scenario_a (priority 1, added first)
-peeked = queue.peek()         # scenario_c (priority 1, added second)
-```
-
 ### Parser functions
 
-- `parse_priority(tag) -> int` — parse `@priority(N)` tag
-- `parse_feature_priority(tag) -> int` — parse `@feature-priority(N)` tag
-- `resolve_priority(scenario_tags, feature_tags, config) -> int` — resolve effective priority
+- `parse_priority(tags) -> int | None` — parse `@priority(N)` from a tag list
+- `parse_feature_priority(tags) -> int | None` — parse `@feature-priority(N)` from a tag list
+- `resolve_priority(scenario_tags, feature_tags, config, rule_tags=None) -> int` — resolve effective priority (scenario > rule > feature > default)
 - `is_critical(tags, critical_tag) -> bool` — check if scenario is critical
 
 ### Exceptions
 
 - `PriorityError` — base exception for all behave-priority errors
 - `PriorityParseError` — raised when a priority tag has invalid syntax
-- `StopExecutionError` — raised internally when fail-fast conditions are met
 
 ## Architecture
 
 ```
 behave_priority/
 ├── __init__.py          # Public exports
-├── exceptions.py        # PriorityError, StopExecutionError, PriorityParseError
+├── exceptions.py        # PriorityError, PriorityParseError
 ├── config.py            # PriorityConfig (frozen dataclass)
 ├── parser.py            # Tag priority parsing
-├── queue.py             # PriorityQueue (thread-safe, heapq-based)
 ├── sorter.py            # ScenarioSorter — reorders behave's runner
 ├── hooks.py             # setup_priority, hook functions, PriorityState
+├── parallel.py          # ParallelCoordinator — cross-process fail-fast
 └── report.py            # PriorityReport, ReportEntry, ReportSummary
 ```
 
@@ -226,6 +250,36 @@ mypy --strict behave_priority/
 # Coverage
 pytest --cov=behave_priority --cov-report=term-missing
 ```
+
+## Limitations
+
+### Parallel execution (`--parallel`)
+
+When behave runs with `--parallel=N`, each worker process gets its own
+isolated `PriorityState`. This has the following consequences:
+
+- **Scenario reordering**: Each worker sorts only its own subset of
+  scenarios. Global priority ordering across workers is not guaranteed.
+  A `@priority(1)` scenario assigned to worker 2 may run after a
+  `@priority(5)` scenario in worker 1.
+- **Fail-fast (`stop_after_failures`)**: By default, only stops scenarios
+  within the same worker. With `parallel_coord=True` and
+  `BEHAVE_PRIORITY_COORD_DIR` set, failure counts are aggregated globally
+  across all workers. See [Parallel coordination](#parallel-coordination).
+- **Critical stop (`stop_on_critical`)**: By default per-worker only.
+  With `parallel_coord=True`, a critical failure in any worker triggers
+  stop in all workers.
+- **Counters**: `failed_count`, `executed_count`, `critical_failed`, and
+  `should_stop` are all per-process. The final report reflects only the
+  worker that generated it.
+- **Reports**: Generated independently per worker. Each worker prints
+  its own report covering only the scenarios it executed. There is no
+  merged or aggregated report.
+- **`time_saved` estimation**: Inaccurate in parallel mode. The
+  estimation assumes sequential execution; with N workers, skipped
+  scenarios in one worker overlap with execution in others.
+- **`priority_tag`**: Scenarios matching the priority tag are sorted
+  first within each worker, but not globally across workers.
 
 ## License
 

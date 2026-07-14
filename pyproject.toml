@@ -4,25 +4,29 @@ build-backend = "hatchling.build"
 
 [project]
 name = "behave-priority"
-version = "0.1.0"
+version = "1.0.0"
 description = "Priority-based execution for Behave BDD"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Mathias Paulenko" },
+    { name = "Mathias Paulenko", email = "mathias.paulenko@gmail.com" },
 ]
-keywords = ["behave", "bdd", "priority", "fail-fast", "testing"]
+keywords = ["behave", "bdd", "priority", "fail-fast", "testing", "gherkin", "cucumber"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Framework :: Pytest",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
     "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Testing :: BDD",
+    "Typing :: Typed",
 ]
 
 dependencies = [
@@ -36,25 +40,53 @@ dev = [
     "ruff>=0.5",
     "mypy>=1.10",
 ]
+docs = [
+    "sphinx>=7.0",
+    "sphinx-autodoc-typehints>=2.0",
+    "furo>=2024.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/MathiasPaulenko/behave-priority"
 Repository = "https://github.com/MathiasPaulenko/behave-priority"
+Issues = "https://github.com/MathiasPaulenko/behave-priority/issues"
+Changelog = "https://github.com/MathiasPaulenko/behave-priority/releases"
 
 [tool.hatch.build.targets.wheel]
 packages = ["behave_priority"]
+
+[tool.hatch.build.targets.sdist]
+include = ["behave_priority", "tests", "docs", "README.md", "LICENSE"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "C4"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "C4", "ANN", "S", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S110", "S603", "ANN201", "ANN001", "SIM102"]
+"docs/*" = ["ANN", "S"]
+"behave_priority/hooks.py" = ["ANN401"]
+"behave_priority/sorter.py" = ["ANN401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 strict = true
 python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "behave.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --cov=behave_priority --cov-report=term-missing"
+filterwarnings = ["error"]
