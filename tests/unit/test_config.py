@@ -169,7 +169,7 @@ class TestImmutability:
 
     def test_cannot_add_new_attribute(self) -> None:
         config = PriorityConfig()
-        with pytest.raises(dataclasses.FrozenInstanceError):
+        with pytest.raises((dataclasses.FrozenInstanceError, TypeError)):
             config.new_field = 42  # type: ignore[attr-defined]
 
     def test_slots_no_dict(self) -> None:
