@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
 authors = [
-    { name = "Mathias Paulenko", email = "mathias.paulenko@gmail.com" },
+    { name = "Mathias Paulenko", email = "mathias.paulenko@outlook.com" },
 ]
 keywords = ["behave", "bdd", "priority", "fail-fast", "testing", "gherkin", "cucumber"]
 classifiers = [
