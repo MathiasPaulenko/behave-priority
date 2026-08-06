@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "behave-priority"
-version = "1.0.0"
+version = "1.0.1"
 description = "Priority-based execution for Behave BDD"
 readme = "README.md"
 license = "MIT"
