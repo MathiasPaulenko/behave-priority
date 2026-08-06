@@ -75,17 +75,13 @@ class ScenarioSorter:
             A new list of features sorted by priority.
         """
         for feature in features:
-            sorted_scenarios = self._sort_scenarios(
-                feature.scenarios, feature.tags
-            )
+            sorted_scenarios = self._sort_scenarios(feature.scenarios, feature.tags)
             feature.scenarios = sorted_scenarios
 
             feature_obj: Any = feature
             run_items = getattr(feature_obj, "run_items", None)
             if run_items is not None:
-                sorted_items = self._sort_run_items(
-                    run_items, feature.tags
-                )
+                sorted_items = self._sort_run_items(run_items, feature.tags)
                 feature_obj.run_items = sorted_items
 
         if self._config.order or self._config.reverse or self._config.priority_tag:
@@ -93,9 +89,7 @@ class ScenarioSorter:
 
         return features
 
-    def _sort_run_items(
-        self, run_items: list[Any], feature_tags: list[str]
-    ) -> list[Any]:
+    def _sort_run_items(self, run_items: list[Any], feature_tags: list[str]) -> list[Any]:
         """Sort run_items, recursing into Rule objects.
 
         Args:
@@ -111,9 +105,7 @@ class ScenarioSorter:
                 rule_tags = getattr(rule_obj, "tags", [])
                 inner_items = getattr(rule_obj, "run_items", None)
                 if inner_items is not None:
-                    rule_obj.run_items = self._sort_scenarios(
-                        inner_items, feature_tags, rule_tags
-                    )
+                    rule_obj.run_items = self._sort_scenarios(inner_items, feature_tags, rule_tags)
                 inner_scenarios = getattr(rule_obj, "scenarios", None)
                 if inner_scenarios is not None:
                     rule_obj.scenarios = self._sort_scenarios(
@@ -141,9 +133,7 @@ class ScenarioSorter:
         """
         return hasattr(item, "run_items")
 
-    def _run_item_sort_key(
-        self, item: Any, feature_tags: list[str]
-    ) -> tuple[int, int]:
+    def _run_item_sort_key(self, item: Any, feature_tags: list[str]) -> tuple[int, int]:
         """Compute sort key for a run item (Scenario or Rule).
 
         Args:
@@ -155,15 +145,10 @@ class ScenarioSorter:
         """
         if self._is_rule(item):
             rule_tags = getattr(item, "tags", [])
-            inner_items: Any = (
-                getattr(item, "run_items", None) or item.scenarios
-            )
+            inner_items: Any = getattr(item, "run_items", None) or item.scenarios
             if not inner_items:
                 return (1, self._config.default_priority)
-            return min(
-                self._sort_key(s.tags, feature_tags, rule_tags)
-                for s in inner_items
-            )
+            return min(self._sort_key(s.tags, feature_tags, rule_tags) for s in inner_items)
         return self._sort_key(item.tags, feature_tags)
 
     def _sort_scenarios(
@@ -203,9 +188,7 @@ class ScenarioSorter:
         Returns:
             A tuple of (primary, secondary) sort keys.
         """
-        priority = resolve_priority(
-            scenario_tags, feature_tags, self._config, rule_tags
-        )
+        priority = resolve_priority(scenario_tags, feature_tags, self._config, rule_tags)
 
         if self._config.priority_tag:
             tag = self._config.priority_tag.removeprefix("@")
@@ -235,15 +218,9 @@ class ScenarioSorter:
         """
         items: Any = getattr(feature, "run_items", None)
         if items:
-            best = min(
-                self._run_item_sort_key(item, feature.tags)
-                for item in items
-            )
+            best = min(self._run_item_sort_key(item, feature.tags) for item in items)
             return best
         scenarios = feature.scenarios
         if not scenarios:
             return (1, self._config.default_priority)
-        return min(
-            self._sort_key(s.tags, feature.tags)
-            for s in scenarios
-        )
+        return min(self._sort_key(s.tags, feature.tags) for s in scenarios)

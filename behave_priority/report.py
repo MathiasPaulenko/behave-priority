@@ -139,9 +139,7 @@ class PriorityReport:
         """
         if not self._entries:
             return (
-                "Priority Execution Report\n"
-                "=========================\n\n"
-                "No scenarios executed.\n"
+                "Priority Execution Report\n=========================\n\nNo scenarios executed.\n"
             )
 
         feature_width = min(
@@ -153,7 +151,8 @@ class PriorityReport:
             40,
         )
         status_width = max(
-            max(len(e.status) for e in self._entries), len("Status"),
+            max(len(e.status) for e in self._entries),
+            len("Status"),
         )
         duration_width = max(
             max(len(f"{e.duration:.2f}s") for e in self._entries),
@@ -186,15 +185,12 @@ class PriorityReport:
         summary = self.summary()
         lines.append("Summary:")
         if summary.critical_total > 0:
-            crit_line = (
-                f"  Critical: {summary.critical_passed}/{summary.critical_total} passed"
-            )
+            crit_line = f"  Critical: {summary.critical_passed}/{summary.critical_total} passed"
             if summary.critical_skipped > 0:
                 crit_line += f", {summary.critical_skipped} skipped"
             lines.append(crit_line)
         total_line = (
-            f"  Total: {summary.passed} passed, {summary.failed} failed, "
-            f"{summary.skipped} skipped"
+            f"  Total: {summary.passed} passed, {summary.failed} failed, {summary.skipped} skipped"
         )
         if summary.undefined > 0:
             total_line += f", {summary.undefined} undefined"
@@ -298,9 +294,7 @@ class PriorityReport:
             bucket = e.priority // self._BUCKET_SIZE
             bucket_durations.setdefault(bucket, []).append(e.duration)
 
-        bucket_avgs = {
-            b: sum(durs) / len(durs) for b, durs in bucket_durations.items()
-        }
+        bucket_avgs = {b: sum(durs) / len(durs) for b, durs in bucket_durations.items()}
 
         global_avg = sum(e.duration for e in executed) / len(executed)
 

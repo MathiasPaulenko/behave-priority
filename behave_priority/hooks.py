@@ -211,8 +211,7 @@ def setup_priority(
         features = getattr(runner, "feature_list", None)
     if features is None:
         logger.warning(
-            "runner has no 'features' or 'feature_list' "
-            "attribute. Scenarios will NOT be reordered."
+            "runner has no 'features' or 'feature_list' attribute. Scenarios will NOT be reordered."
         )
         return
 
@@ -233,18 +232,13 @@ def setup_priority(
         for item in items:
             if hasattr(item, "run_items"):
                 rule_tags: list[str] = getattr(item, "tags", [])
-                inner_items: Any = (
-                    getattr(item, "run_items", None)
-                    or getattr(item, "scenarios", [])
+                inner_items: Any = getattr(item, "run_items", None) or getattr(
+                    item, "scenarios", []
                 )
                 for scenario in inner_items:
-                    _map_scenario(
-                        state, scenario, feature.tags, feature_name, config, rule_tags
-                    )
+                    _map_scenario(state, scenario, feature.tags, feature_name, config, rule_tags)
             else:
-                _map_scenario(
-                    state, item, feature.tags, feature_name, config
-                )
+                _map_scenario(state, item, feature.tags, feature_name, config)
 
     context._priority_state = state
 

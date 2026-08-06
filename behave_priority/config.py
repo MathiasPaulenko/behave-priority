@@ -61,11 +61,8 @@ class PriorityConfig:
         if self.priority_tag is not None and not self.priority_tag:
             raise ValueError("priority_tag must not be empty if provided")
         if self.default_priority < 0:
-            raise ValueError(
-                f"default_priority must be non-negative, got {self.default_priority}"
-            )
+            raise ValueError(f"default_priority must be non-negative, got {self.default_priority}")
         if self.report_format not in _VALID_FORMATS:
             raise ValueError(
-                f"report_format must be one of 'text', 'json', 'csv', "
-                f"got {self.report_format!r}"
+                f"report_format must be one of 'text', 'json', 'csv', got {self.report_format!r}"
             )

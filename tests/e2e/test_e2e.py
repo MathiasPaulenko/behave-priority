@@ -37,10 +37,13 @@ def run_behave(
     env["PYTHONPATH"] = str(Path(__file__).parent.parent.parent)
 
     cmd = [
-        sys.executable, "-m", "behave",
+        sys.executable,
+        "-m",
+        "behave",
         "--no-color",
         "--no-capture",
-        "--format", "plain",
+        "--format",
+        "plain",
         str(FEATURES_DIR / feature_file),
     ]
     if extra_args:
@@ -67,9 +70,7 @@ def extract_scenario_order(output: str) -> list[str]:
     """
     scenarios: list[str] = []
     for line in output.splitlines():
-        match = re.match(
-            r"^(?:  ){1,2}Scenario(?: Outline)?: (.+)$", line
-        )
+        match = re.match(r"^(?:  ){1,2}Scenario(?: Outline)?: (.+)$", line)
         if match:
             scenarios.append(match.group(1).strip())
     return scenarios
@@ -90,9 +91,7 @@ def extract_statuses(output: str) -> dict[str, str]:
     statuses: dict[str, str] = {}
     current_scenario: str | None = None
     for line in output.splitlines():
-        match = re.match(
-            r"^(?:  ){1,2}Scenario(?: Outline)?: (.+)$", line
-        )
+        match = re.match(r"^(?:  ){1,2}Scenario(?: Outline)?: (.+)$", line)
         if match:
             current_scenario = match.group(1).strip()
             continue
@@ -226,10 +225,13 @@ class TestNoConfig:
         env["PYTHONPATH"] = str(Path(__file__).parent.parent.parent)
         result = subprocess.run(
             [
-                sys.executable, "-m", "behave",
+                sys.executable,
+                "-m",
+                "behave",
                 "--no-color",
                 "--no-capture",
-                "--format", "plain",
+                "--format",
+                "plain",
                 str(FEATURES_DIR / "priority_order.feature"),
             ],
             capture_output=True,

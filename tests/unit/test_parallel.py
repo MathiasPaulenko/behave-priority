@@ -58,14 +58,10 @@ class TestParallelCoordinator:
         coord.report_failure(is_critical=True)
         assert coord.should_stop(stop_after_failures=None, stop_on_critical=True)
 
-    def test_should_not_stop_on_critical_when_disabled(
-        self, tmp_path: Path
-    ) -> None:
+    def test_should_not_stop_on_critical_when_disabled(self, tmp_path: Path) -> None:
         coord = ParallelCoordinator(tmp_path, worker_id="w1")
         coord.report_failure(is_critical=True)
-        assert not coord.should_stop(
-            stop_after_failures=None, stop_on_critical=False
-        )
+        assert not coord.should_stop(stop_after_failures=None, stop_on_critical=False)
 
     def test_aggregates_across_workers(self, tmp_path: Path) -> None:
         w1 = ParallelCoordinator(tmp_path, worker_id="w1")
@@ -80,9 +76,7 @@ class TestParallelCoordinator:
         w1 = ParallelCoordinator(tmp_path, worker_id="w1")
         w2 = ParallelCoordinator(tmp_path, worker_id="w2")
         w1.report_failure(is_critical=True)
-        assert w2.should_stop(
-            stop_after_failures=None, stop_on_critical=True
-        )
+        assert w2.should_stop(stop_after_failures=None, stop_on_critical=True)
 
     def test_cleanup_removes_worker_file(self, tmp_path: Path) -> None:
         coord = ParallelCoordinator(tmp_path, worker_id="w1")
@@ -109,26 +103,20 @@ class TestParallelCoordinator:
     def test_ignores_corrupt_worker_files(self, tmp_path: Path) -> None:
         coord = ParallelCoordinator(tmp_path, worker_id="w1")
         (tmp_path / "worker_corrupt.json").write_text("not json")
-        assert not coord.should_stop(
-            stop_after_failures=1, stop_on_critical=False
-        )
+        assert not coord.should_stop(stop_after_failures=1, stop_on_critical=False)
         coord.cleanup()
 
     def test_no_threshold_returns_false(self, tmp_path: Path) -> None:
         coord = ParallelCoordinator(tmp_path, worker_id="w1")
         coord.report_failure()
-        assert not coord.should_stop(
-            stop_after_failures=None, stop_on_critical=False
-        )
+        assert not coord.should_stop(stop_after_failures=None, stop_on_critical=False)
         coord.cleanup()
 
 
 class TestCreateCoordinator:
     """Tests for create_coordinator factory function."""
 
-    def test_returns_none_when_env_not_set(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_returns_none_when_env_not_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("BEHAVE_PRIORITY_COORD_DIR", raising=False)
         assert create_coordinator() is None
 
@@ -143,9 +131,7 @@ class TestCreateCoordinator:
         assert coord.worker_id == "test_w1"
         coord.cleanup()
 
-    def test_get_coord_dir_from_env(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_get_coord_dir_from_env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", str(tmp_path))
         assert get_coord_dir() == str(tmp_path)
 
@@ -159,9 +145,7 @@ class TestCleanupCoordinator:
 
         cleanup_coordinator(FakeCtx())
 
-    def test_cleanup_removes_file(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_cleanup_removes_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", str(tmp_path))
         coord = create_coordinator(worker_id="test_w1")
         assert coord is not None

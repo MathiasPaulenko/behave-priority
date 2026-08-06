@@ -113,6 +113,7 @@ from behave_priority import (
     priority_report,
 )
 
+
 def before_all(context):
     setup_priority(
         context,
@@ -122,11 +123,14 @@ def before_all(context):
         report=True,
     )
 
+
 def before_scenario(context, scenario):
     before_scenario_hook(context, scenario)
 
+
 def after_scenario(context, scenario):
     after_scenario_hook(context, scenario)
+
 
 def after_all(context):
     priority_report(context)

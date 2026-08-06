@@ -157,8 +157,6 @@ def cleanup_coordinator(context: object) -> None:
     Args:
         context: Behave's context object.
     """
-    coordinator: ParallelCoordinator | None = getattr(
-        context, "_priority_coordinator", None
-    )
+    coordinator: ParallelCoordinator | None = getattr(context, "_priority_coordinator", None)
     if coordinator is not None:
         coordinator.cleanup()

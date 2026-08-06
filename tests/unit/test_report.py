@@ -76,65 +76,121 @@ class TestReportEntry:
 class TestReportSummary:
     def test_time_saved_defaults_to_zero(self) -> None:
         s = ReportSummary(
-            total=10, passed=5, failed=3, skipped=2, undefined=0,
-            critical_total=1, critical_passed=1, critical_failed=0,
-            total_duration=100.0, skipped_duration=0.0,
+            total=10,
+            passed=5,
+            failed=3,
+            skipped=2,
+            undefined=0,
+            critical_total=1,
+            critical_passed=1,
+            critical_failed=0,
+            total_duration=100.0,
+            skipped_duration=0.0,
         )
         assert s.time_saved == 0.0
 
     def test_time_saved_zero_when_no_skipped(self) -> None:
         s = ReportSummary(
-            total=5, passed=5, failed=0, skipped=0, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=50.0, skipped_duration=0.0,
+            total=5,
+            passed=5,
+            failed=0,
+            skipped=0,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=50.0,
+            skipped_duration=0.0,
         )
         assert s.time_saved == 0.0
 
     def test_time_saved_zero_when_all_skipped(self) -> None:
         s = ReportSummary(
-            total=5, passed=0, failed=0, skipped=5, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=0.0, skipped_duration=0.0,
+            total=5,
+            passed=0,
+            failed=0,
+            skipped=5,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=0.0,
+            skipped_duration=0.0,
         )
         assert s.time_saved == 0.0
 
     def test_pass_rate_all_passed(self) -> None:
         s = ReportSummary(
-            total=10, passed=10, failed=0, skipped=0, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=50.0, skipped_duration=0.0,
+            total=10,
+            passed=10,
+            failed=0,
+            skipped=0,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=50.0,
+            skipped_duration=0.0,
         )
         assert s.pass_rate == 100.0
 
     def test_pass_rate_half(self) -> None:
         s = ReportSummary(
-            total=10, passed=5, failed=5, skipped=0, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=50.0, skipped_duration=0.0,
+            total=10,
+            passed=5,
+            failed=5,
+            skipped=0,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=50.0,
+            skipped_duration=0.0,
         )
         assert s.pass_rate == 50.0
 
     def test_pass_rate_excludes_skipped(self) -> None:
         s = ReportSummary(
-            total=10, passed=5, failed=3, skipped=2, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=50.0, skipped_duration=10.0,
+            total=10,
+            passed=5,
+            failed=3,
+            skipped=2,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=50.0,
+            skipped_duration=10.0,
         )
         assert s.pass_rate == (5 / 8) * 100
 
     def test_pass_rate_zero_executed(self) -> None:
         s = ReportSummary(
-            total=5, passed=0, failed=0, skipped=5, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=25.0, skipped_duration=25.0,
+            total=5,
+            passed=0,
+            failed=0,
+            skipped=5,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=25.0,
+            skipped_duration=25.0,
         )
         assert s.pass_rate == 0.0
 
     def test_is_frozen(self) -> None:
         s = ReportSummary(
-            total=1, passed=1, failed=0, skipped=0, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=1.0, skipped_duration=0.0,
+            total=1,
+            passed=1,
+            failed=0,
+            skipped=0,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=1.0,
+            skipped_duration=0.0,
         )
         try:
             s.total = 5  # type: ignore[misc]
@@ -145,9 +201,16 @@ class TestReportSummary:
 
     def test_has_slots(self) -> None:
         s = ReportSummary(
-            total=1, passed=1, failed=0, skipped=0, undefined=0,
-            critical_total=0, critical_passed=0, critical_failed=0,
-            total_duration=1.0, skipped_duration=0.0,
+            total=1,
+            passed=1,
+            failed=0,
+            skipped=0,
+            undefined=0,
+            critical_total=0,
+            critical_passed=0,
+            critical_failed=0,
+            total_duration=1.0,
+            skipped_duration=0.0,
         )
         assert not hasattr(s, "__dict__")
 

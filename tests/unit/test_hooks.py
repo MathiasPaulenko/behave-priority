@@ -147,17 +147,13 @@ class TestCheckFailFast:
         assert state.check_fail_fast() is False
 
     def test_both_conditions(self) -> None:
-        state = make_state(
-            PriorityConfig(stop_after_failures=2, stop_on_critical=True)
-        )
+        state = make_state(PriorityConfig(stop_after_failures=2, stop_on_critical=True))
         state.failed_count = 2
         state.critical_failed = True
         assert state.check_fail_fast() is True
 
     def test_either_condition_satisfies(self) -> None:
-        state = make_state(
-            PriorityConfig(stop_after_failures=5, stop_on_critical=True)
-        )
+        state = make_state(PriorityConfig(stop_after_failures=5, stop_on_critical=True))
         state.critical_failed = True
         assert state.check_fail_fast() is True
 
@@ -257,9 +253,7 @@ class TestSetupPriority:
 
     def test_feature_priority_in_map(self) -> None:
         s1 = FakeScenario("no_tag")
-        feature = FakeFeature(
-            "F", "f.feature", tags=["feature-priority(3)"], scenarios=[s1]
-        )
+        feature = FakeFeature("F", "f.feature", tags=["feature-priority(3)"], scenarios=[s1])
         runner = FakeRunner(features=[feature])
         ctx = FakeContext(_runner=runner)
         setup_priority(ctx)
@@ -422,9 +416,7 @@ class TestAfterScenarioHook:
     def test_records_critical_failure(self) -> None:
         state = make_state(PriorityConfig(stop_on_critical=True))
         ctx = FakeContext(_priority_state=state)
-        scenario = FakeScenario(
-            "s", status="failed", tags=["critical"], duration=1.0
-        )
+        scenario = FakeScenario("s", status="failed", tags=["critical"], duration=1.0)
         after_scenario_hook(ctx, scenario)
         assert state.critical_failed is True
         assert state.should_stop is True
@@ -522,18 +514,14 @@ class TestPriorityReportFunction:
             priority_report(ctx)
         assert "Priority Execution Report" in caplog.text
 
-    def test_does_not_print_when_report_disabled(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_does_not_print_when_report_disabled(self, caplog: pytest.LogCaptureFixture) -> None:
         state = make_state(PriorityConfig(report=False))
         ctx = FakeContext(_priority_state=state)
         with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
             priority_report(ctx)
         assert caplog.text == ""
 
-    def test_json_format_outputs_json(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_json_format_outputs_json(self, caplog: pytest.LogCaptureFixture) -> None:
         state = make_state(PriorityConfig(report=True, report_format="json"))
         ctx = FakeContext(_priority_state=state)
         with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
@@ -546,9 +534,7 @@ class TestPriorityReportFunction:
         assert "entries" in data
         assert "summary" in data
 
-    def test_csv_format_outputs_csv(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_csv_format_outputs_csv(self, caplog: pytest.LogCaptureFixture) -> None:
         state = make_state(PriorityConfig(report=True, report_format="csv"))
         ctx = FakeContext(_priority_state=state)
         with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
@@ -766,7 +752,8 @@ class TestRuleSupport:
         rule_s = FakeScenario("rule_s", tags=["priority(1)"], filename="f.feature", line=8)
         rule = FakeRule("R", run_items=[rule_s], scenarios=[rule_s])
         feature = FakeFeature(
-            "F", "f.feature",
+            "F",
+            "f.feature",
             run_items=[standalone, rule],
             scenarios=[standalone, rule_s],
         )

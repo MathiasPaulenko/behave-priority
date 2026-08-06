@@ -109,12 +109,8 @@ class TestSortScenarios:
         normal_names = [s.name for s in feature.scenarios if "smoke" not in s.tags]
         assert len(smoke_names) == 2
         assert len(normal_names) == 2
-        first_smoke_idx = next(
-            i for i, s in enumerate(feature.scenarios) if "smoke" in s.tags
-        )
-        first_normal_idx = next(
-            i for i, s in enumerate(feature.scenarios) if "smoke" not in s.tags
-        )
+        first_smoke_idx = next(i for i, s in enumerate(feature.scenarios) if "smoke" in s.tags)
+        first_normal_idx = next(i for i, s in enumerate(feature.scenarios) if "smoke" not in s.tags)
         assert first_smoke_idx < first_normal_idx
 
     def test_priority_tag_with_at_prefix(self) -> None:
@@ -523,9 +519,7 @@ class TestRealWorldScenarios:
     def test_all_same_priority_preserves_order(self) -> None:
         config = PriorityConfig(order=True)
         sorter = ScenarioSorter(config)
-        scenarios = [
-            FakeScenario(f"s{i}", tags=["priority(1)"]) for i in range(10)
-        ]
+        scenarios = [FakeScenario(f"s{i}", tags=["priority(1)"]) for i in range(10)]
         feature = make_feature("F", scenarios=scenarios)
         sorter.sort([feature])
         assert [s.name for s in feature.scenarios] == [f"s{i}" for i in range(10)]
@@ -583,9 +577,7 @@ class TestSortStability:
         outline_c = FakeScenario("Login outline <row 3>")
         high = FakeScenario("Smoke test", tags=["priority(1)"])
         low = FakeScenario("Regression", tags=["priority(5)"])
-        feature = make_feature(
-            "F", scenarios=[outline_a, outline_b, outline_c, high, low]
-        )
+        feature = make_feature("F", scenarios=[outline_a, outline_b, outline_c, high, low])
         sorter.sort([feature])
         names = [s.name for s in feature.scenarios]
         assert names == [
@@ -603,9 +595,7 @@ class TestSortStability:
         outline_b = FakeScenario("Outline <b>", tags=["priority(2)"])
         outline_c = FakeScenario("Outline <c>", tags=["priority(2)"])
         high = FakeScenario("High", tags=["priority(1)"])
-        feature = make_feature(
-            "F", scenarios=[outline_a, outline_b, outline_c, high]
-        )
+        feature = make_feature("F", scenarios=[outline_a, outline_b, outline_c, high])
         sorter.sort([feature])
         names = [s.name for s in feature.scenarios]
         assert names == ["High", "Outline <a>", "Outline <b>", "Outline <c>"]
@@ -617,9 +607,7 @@ class TestSortStability:
         o1b = FakeScenario("Outline1 <b>")
         o2a = FakeScenario("Outline2 <a>")
         o2b = FakeScenario("Outline2 <b>")
-        feature = make_feature(
-            "F", scenarios=[o1a, o1b, o2a, o2b]
-        )
+        feature = make_feature("F", scenarios=[o1a, o1b, o2a, o2b])
         sorter.sort([feature])
         names = [s.name for s in feature.scenarios]
         assert names == ["Outline1 <a>", "Outline1 <b>", "Outline2 <a>", "Outline2 <b>"]
@@ -632,9 +620,7 @@ class TestSortStability:
         b2 = FakeScenario("B2", tags=["priority(2)"])
         b3 = FakeScenario("B3", tags=["priority(2)"])
         a2 = FakeScenario("A2", tags=["priority(1)"])
-        feature = make_feature(
-            "F", scenarios=[b1, b2, a1, b3, a2]
-        )
+        feature = make_feature("F", scenarios=[b1, b2, a1, b3, a2])
         sorter.sort([feature])
         names = [s.name for s in feature.scenarios]
         assert names == ["A1", "A2", "B1", "B2", "B3"]
@@ -670,7 +656,8 @@ class TestRuleSupport:
         rule_s = FakeScenario("rule_high", tags=["priority(1)"])
         rule = FakeRule("R", run_items=[rule_s], scenarios=[rule_s])
         feature = FakeFeature(
-            "F", "f.feature",
+            "F",
+            "f.feature",
             run_items=[standalone, rule],
             scenarios=[standalone, rule_s],
         )
@@ -687,7 +674,8 @@ class TestRuleSupport:
         rule1 = FakeRule("R1", run_items=[s1], scenarios=[s1])
         rule2 = FakeRule("R2", run_items=[s2], scenarios=[s2])
         feature = FakeFeature(
-            "F", "f.feature",
+            "F",
+            "f.feature",
             run_items=[rule1, rule2],
             scenarios=[s1, s2],
         )
@@ -720,7 +708,8 @@ class TestRuleSupport:
         rule_s = FakeScenario("rule_s", tags=["priority(1)"])
         rule = FakeRule("R", run_items=[rule_s], scenarios=[rule_s])
         feature = FakeFeature(
-            "F", "f.feature",
+            "F",
+            "f.feature",
             run_items=[plain, rule],
             scenarios=[plain, rule_s],
         )

@@ -55,9 +55,7 @@ class BehaveResult:
                 step_statuses = []
                 continue
 
-            step_match = re.match(
-                r"\s+(?:Given|When|Then|And|But)\s+.+\.\.\.\s+(\w+)", line
-            )
+            step_match = re.match(r"\s+(?:Given|When|Then|And|But)\s+.+\.\.\.\s+(\w+)", line)
             if step_match and current_name is not None:
                 step_statuses.append(step_match.group(1))
 
@@ -121,8 +119,7 @@ def run_behave(tmp_path: Path) -> Callable[..., BehaveResult]:
         env_with_logging = (
             "import logging, sys\n"
             "logging.basicConfig(stream=sys.stdout, "
-            "level=logging.INFO, format='%(message)s')\n"
-            + env_py
+            "level=logging.INFO, format='%(message)s')\n" + env_py
         )
         (features_dir / "environment.py").write_text(env_with_logging)
         (features_dir / feature_filename).write_text(feature_content)
