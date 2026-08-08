@@ -111,6 +111,63 @@ When ``True``, the execution report is printed to stdout via
 The report can also be accessed programmatically via ``get_report(context)``
 regardless of this setting.
 
+Environment Variables
+---------------------
+
+The following environment variables can be used as defaults when
+``setup_priority`` is called without the corresponding argument (or with the
+argument set to ``None``):
+
+.. list-table:: Environment variables
+   :header-rows: 1
+
+   * - Variable
+     - Type
+     - Default
+     - Argument
+   * - ``BEHAVE_PRIORITY_ORDER``
+     - ``0`` / ``1``
+     - ``0``
+     - ``order``
+   * - ``BEHAVE_PRIORITY_REVERSE``
+     - ``0`` / ``1``
+     - ``0``
+     - ``reverse``
+   * - ``BEHAVE_PRIORITY_FAIL_FAST``
+     - ``0`` / ``1``
+     - ``0``
+     - ``stop_on_critical``
+   * - ``BEHAVE_PRIORITY_STOP_AFTER``
+     - integer
+     - (disabled)
+     - ``stop_after_failures``
+   * - ``BEHAVE_PRIORITY_REPORT``
+     - ``0`` / ``1``
+     - ``0``
+     - ``report``
+   * - ``BEHAVE_PRIORITY_PARALLEL_COORD``
+     - ``0`` / ``1``
+     - ``0``
+     - ``parallel_coord``
+   * - ``BEHAVE_PRIORITY_COORD_DIR``
+     - string
+     - (none)
+     - (used by ``ParallelCoordinator``)
+
+Explicit arguments always take precedence over environment variables. This is
+useful for CI runners or wrappers that invoke behave and want to control
+priority ordering and fail-fast behavior via the shell.
+
+Example:
+
+.. code-block:: bash
+
+   export BEHAVE_PRIORITY_ORDER=1
+   export BEHAVE_PRIORITY_FAIL_FAST=1
+   export BEHAVE_PRIORITY_STOP_AFTER=3
+   export BEHAVE_PRIORITY_REPORT=1
+   behave
+
 Validation Errors
 -----------------
 

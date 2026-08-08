@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -152,35 +153,56 @@ class PriorityState:
 def setup_priority(
     context: Any,
     *,
-    order: bool = False,
-    reverse: bool = False,
+    order: bool | None = None,
+    reverse: bool | None = None,
     priority_tag: str | None = None,
     stop_after_failures: int | None = None,
-    stop_on_critical: bool = False,
+    stop_on_critical: bool | None = None,
     critical_tag: str = "critical",
     default_priority: int = 999,
-    report: bool = False,
+    report: bool | None = None,
     report_format: ReportFormat = "text",
-    parallel_coord: bool = False,
+    parallel_coord: bool | None = None,
 ) -> None:
     """Set up priority execution in before_all hook.
 
-    All configuration is passed explicitly — no CLI flags.
+    Configuration can be passed explicitly or via environment variables
+    when arguments are ``None``.
 
     Args:
         context: Behave's context object (``context`` in ``before_all``).
-        order: Sort scenarios by priority (highest first).
-        reverse: Reverse sort order (lowest priority first).
+        order: Sort scenarios by priority (highest first). If ``None``,
+            reads ``BEHAVE_PRIORITY_ORDER`` (default ``0``).
+        reverse: Reverse sort order (lowest priority first). If ``None``,
+            reads ``BEHAVE_PRIORITY_REVERSE`` (default ``0``).
         priority_tag: Tag name to run first (e.g. ``"smoke"``).
-        stop_after_failures: Stop after N failed scenarios.
-        stop_on_critical: Stop if any critical scenario fails.
+        stop_after_failures: Stop after N failed scenarios. If ``None``,
+            reads ``BEHAVE_PRIORITY_STOP_AFTER`` (default disabled).
+        stop_on_critical: Stop if any critical scenario fails. If ``None``,
+            reads ``BEHAVE_PRIORITY_FAIL_FAST`` (default ``0``).
         critical_tag: Tag name that marks a scenario as critical.
         default_priority: Priority for scenarios without a priority tag.
-        report: Print execution report after run.
+        report: Print execution report after run. If ``None``,
+            reads ``BEHAVE_PRIORITY_REPORT`` (default ``0``).
         report_format: Output format for the report (``"text"``, ``"json"``, ``"csv"``).
         parallel_coord: Enable cross-process fail-fast coordination.
+            If ``None``, reads ``BEHAVE_PRIORITY_PARALLEL_COORD`` (default ``0``).
             Requires ``BEHAVE_PRIORITY_COORD_DIR`` env var to be set.
     """
+    if order is None:
+        order = os.environ.get("BEHAVE_PRIORITY_ORDER", "0") == "1"
+    if reverse is None:
+        reverse = os.environ.get("BEHAVE_PRIORITY_REVERSE", "0") == "1"
+    if stop_on_critical is None:
+        stop_on_critical = os.environ.get("BEHAVE_PRIORITY_FAIL_FAST", "0") == "1"
+    if stop_after_failures is None:
+        val = os.environ.get("BEHAVE_PRIORITY_STOP_AFTER")
+        stop_after_failures = int(val) if val else None
+    if report is None:
+        report = os.environ.get("BEHAVE_PRIORITY_REPORT", "0") == "1"
+    if parallel_coord is None:
+        parallel_coord = os.environ.get("BEHAVE_PRIORITY_PARALLEL_COORD", "0") == "1"
+
     config = PriorityConfig(
         order=order,
         reverse=reverse,

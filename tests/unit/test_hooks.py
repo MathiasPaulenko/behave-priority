@@ -289,6 +289,79 @@ class TestSetupPriority:
         state = ctx._priority_state
         assert state.feature_map[_scenario_key(s1)] == "path/to/f.feature"
 
+    def test_env_var_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a", tags=["priority(1)"])
+        s2 = FakeScenario("b", tags=["priority(2)"])
+        feature = FakeFeature("F", "f.feature", scenarios=[s2, s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_ORDER", "1")
+        setup_priority(ctx)
+        assert runner.features[0].scenarios == [s1, s2]
+
+    def test_env_var_reverse(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a", tags=["priority(1)"])
+        s2 = FakeScenario("b", tags=["priority(2)"])
+        feature = FakeFeature("F", "f.feature", scenarios=[s2, s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_ORDER", "1")
+        monkeypatch.setenv("BEHAVE_PRIORITY_REVERSE", "1")
+        setup_priority(ctx)
+        assert runner.features[0].scenarios == [s2, s1]
+
+    def test_env_var_stop_on_critical(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a")
+        feature = FakeFeature("F", "f.feature", scenarios=[s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_FAIL_FAST", "1")
+        setup_priority(ctx)
+        state = ctx._priority_state
+        assert state.config.stop_on_critical is True
+
+    def test_env_var_stop_after_failures(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a")
+        feature = FakeFeature("F", "f.feature", scenarios=[s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_STOP_AFTER", "5")
+        setup_priority(ctx)
+        state = ctx._priority_state
+        assert state.config.stop_after_failures == 5
+
+    def test_env_var_report(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a")
+        feature = FakeFeature("F", "f.feature", scenarios=[s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_REPORT", "1")
+        setup_priority(ctx)
+        state = ctx._priority_state
+        assert state.config.report is True
+
+    def test_env_var_parallel_coord(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a")
+        feature = FakeFeature("F", "f.feature", scenarios=[s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_PARALLEL_COORD", "1")
+        setup_priority(ctx)
+        state = ctx._priority_state
+        assert state.config.parallel_coord is True
+
+    def test_explicit_args_override_env_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a")
+        feature = FakeFeature("F", "f.feature", scenarios=[s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_ORDER", "1")
+        monkeypatch.setenv("BEHAVE_PRIORITY_STOP_AFTER", "99")
+        setup_priority(ctx, order=False, stop_after_failures=2)
+        state = ctx._priority_state
+        assert state.config.order is False
+        assert state.config.stop_after_failures == 2
+
 
 class TestBeforeScenarioHook:
     def test_no_state_does_nothing(self) -> None:
