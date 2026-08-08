@@ -4,7 +4,7 @@ import behave_priority
 
 
 def test_version() -> None:
-    assert behave_priority.__version__ == "1.0.1"
+    assert behave_priority.__version__ == "1.1.0"
 
 
 def test_all_exports() -> None:
