@@ -211,12 +211,12 @@ Returns the `PriorityReport` for the run (or `None` if `setup_priority` wasn't c
 def after_all(context):
     report = get_report(context)
     if report:
-        data = report.to_dict()      # dict: {"entries": [...], "summary": {...}}
+        data = report.to_dict()  # dict: {"entries": [...], "summary": {...}}
         json_str = report.to_json()  # same as to_dict, as JSON string
-        csv_str = report.to_csv()    # one row per scenario (no summary)
-        for entry in report.entries: # tuple of ReportEntry, in execution order
+        csv_str = report.to_csv()  # one row per scenario (no summary)
+        for entry in report.entries:  # tuple of ReportEntry, in execution order
             print(entry.scenario_name, entry.status)
-        summary = report.summary()   # ReportSummary with aggregates
+        summary = report.summary()  # ReportSummary with aggregates
 ```
 
 ### `PriorityConfig`
