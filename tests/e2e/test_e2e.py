@@ -220,24 +220,19 @@ class TestNoConfig:
     """Verify behave runs without priority setup (graceful degradation)."""
 
     def test_behave_without_priority_config(self) -> None:
-        env = os.environ.copy()
-        env.pop("BEHAVE_PRIORITY_CONFIG", None)
-        env["PYTHONPATH"] = str(Path(__file__).parent.parent.parent)
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "behave",
-                "--no-color",
-                "--no-capture",
-                "--format",
-                "plain",
-                str(FEATURES_DIR / "priority_order.feature"),
-            ],
-            capture_output=True,
-            text=True,
-            env=env,
-            cwd=str(FEATURES_DIR.parent),
-            timeout=30,
-        )
+        result = run_behave("priority_order.feature", "none")
         assert result.returncode == 0, result.stderr
+
+    def test_no_report_without_priority_config(self) -> None:
+        result = run_behave("priority_order.feature", "none")
+        assert "Priority Execution Report" not in result.stdout
+
+    def test_file_order_preserved_without_priority_config(self) -> None:
+        result = run_behave("priority_order.feature", "none")
+        order = extract_scenario_order(result.stdout)
+        assert order == [
+            "High priority scenario",
+            "Medium priority scenario",
+            "Low priority scenario",
+            "No priority tag scenario",
+        ]

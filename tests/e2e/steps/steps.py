@@ -13,11 +13,6 @@ def step_fails(context):
     raise AssertionError("Intentional failure for testing")
 
 
-@given("a step that is undefined")
-def step_undefined(context):
-    pass  # This will be undefined if not registered
-
-
 @when("the scenario runs")
 def when_runs(context):
     pass

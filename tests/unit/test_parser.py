@@ -30,7 +30,7 @@ class TestParsePriority:
     def test_no_priority_tag(self) -> None:
         assert parse_priority(["critical", "smoke"]) is None
 
-    def test_multiple_priority_tags_first_wins(self) -> None:
+    def test_multiple_priority_tags_min_wins(self) -> None:
         assert parse_priority(["priority(1)", "priority(3)"]) == 1
 
     def test_malformed_non_integer(self) -> None:
@@ -108,7 +108,7 @@ class TestParseFeaturePriority:
     def test_no_feature_priority_tag(self) -> None:
         assert parse_feature_priority(["critical", "smoke"]) is None
 
-    def test_multiple_feature_priority_tags_first_wins(self) -> None:
+    def test_multiple_feature_priority_tags_min_wins(self) -> None:
         assert parse_feature_priority(["feature-priority(1)", "feature-priority(5)"]) == 1
 
     def test_malformed_feature_priority(self) -> None:

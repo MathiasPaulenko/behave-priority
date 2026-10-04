@@ -118,9 +118,11 @@ The dictionary structure:
            "failed": 0,
            "skipped": 0,
            "undefined": 0,
+           "untested": 0,
            "critical_total": 0,
            "critical_passed": 0,
            "critical_failed": 0,
+           "critical_skipped": 0,
            "total_duration": 1.23,
            "skipped_duration": 0.0,
            "pass_rate": 100.0,
@@ -132,28 +134,30 @@ Time Saved Estimation
 ---------------------
 
 Skipped scenarios have ``duration=0`` because they never executed. To
-provide a meaningful "time saved" metric, the report estimates the saved
-time as:
+provide a meaningful "time saved" metric, the report estimates each skipped
+scenario's duration using **priority-bucketed averages**:
 
-.. code-block:: text
+- Executed (non-skipped) scenarios are grouped into priority buckets of
+  size 100 (priorities 0-99, 100-199, etc.).
+- Each skipped scenario's estimated duration is the average duration of
+  executed scenarios in the same priority bucket.
+- If a bucket has no executed scenarios, the global average of all executed
+  scenarios is used as fallback.
 
-   time_saved = average(executed_durations) * skipped_count
-
-Where:
-
-- ``executed_durations`` = durations of all non-skipped scenarios
-- ``skipped_count`` = number of skipped scenarios
+This is more accurate than a flat average because scenarios with similar
+priorities tend to have similar durations (e.g. fast smoke tests vs slow
+regression tests).
 
 If no scenarios were executed (all skipped), ``time_saved`` is ``0.0``.
 
 Pass Rate
 ---------
 
-The pass rate excludes skipped scenarios from the denominator:
+The pass rate excludes skipped and undefined scenarios from the denominator:
 
 .. code-block:: text
 
-   pass_rate = (passed / (total - skipped)) * 100
+   pass_rate = (passed / (total - skipped - undefined)) * 100
 
 This gives a more meaningful pass rate for fail-fast runs where many
 scenarios may be skipped.
@@ -172,7 +176,7 @@ You can iterate over report entries for custom processing:
        if report is None:
            return
 
-       for entry in report._entries:
+       for entry in report.entries:
            if entry.status == "failed":
                print(f"FAILED: {entry.scenario_name} (priority: {entry.priority})")
 

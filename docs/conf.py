@@ -5,13 +5,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path("..").resolve()))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from behave_priority import __version__  # noqa: E402
 
 project = "behave-priority"
-copyright = "2024, behave-priority contributors"
-author = "behave-priority contributors"
-release = "0.1.0"
-version = "0.1.0"
+copyright = "2025, Mathias Paulenko"
+author = "Mathias Paulenko"
+release = __version__
+version = __version__
 
 extensions = [
     "sphinx.ext.autodoc",
@@ -21,6 +23,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.todo",
     "sphinx.ext.coverage",
+    "sphinx_autodoc_typehints",
 ]
 
 templates_path = ["_templates"]
@@ -34,7 +37,7 @@ html_theme_options = {
     "source_directory": "docs/",
 }
 
-todo_include_todos = True
+todo_include_todos = False
 
 autodoc_default_options = {
     "members": True,

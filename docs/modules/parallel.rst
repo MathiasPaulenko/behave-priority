@@ -1,15 +1,13 @@
 parallel
 ========
 
-.. automodule:: behave_priority.parallel
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. module:: behave_priority.parallel
+   :no-index:
 
 Classes
 -------
 
-.. autoclass:: ParallelCoordinator
+.. autoclass:: behave_priority.parallel.ParallelCoordinator
    :members:
    :undoc-members:
    :show-inheritance:
@@ -17,8 +15,8 @@ Classes
 Functions
 ---------
 
-.. autofunction:: get_coord_dir
+.. autofunction:: behave_priority.parallel.get_coord_dir
 
-.. autofunction:: create_coordinator
+.. autofunction:: behave_priority.parallel.create_coordinator
 
-.. autofunction:: cleanup_coordinator
+.. autofunction:: behave_priority.parallel.cleanup_coordinator

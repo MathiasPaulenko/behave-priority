@@ -51,10 +51,14 @@ class PriorityConfig:
 
     def __post_init__(self) -> None:
         """Validate configuration fields after initialization."""
-        if self.stop_after_failures is not None and self.stop_after_failures <= 0:
+        if self.stop_after_failures is not None and (
+            not isinstance(self.stop_after_failures, int)
+            or isinstance(self.stop_after_failures, bool)
+            or self.stop_after_failures <= 0
+        ):
             raise ValueError(
                 f"stop_after_failures must be a positive integer or None, "
-                f"got {self.stop_after_failures}"
+                f"got {self.stop_after_failures!r}"
             )
         if not self.critical_tag:
             raise ValueError("critical_tag must not be empty")

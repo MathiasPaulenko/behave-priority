@@ -5,7 +5,7 @@ The hooks module provides the integration layer between ``behave-priority``
 and behave's lifecycle. It exposes functions for ``before_all``,
 ``before_scenario``, ``after_scenario``, and ``after_all`` hooks.
 
-.. autodata:: behave_priority.hooks._scenario_key
+.. autofunction:: behave_priority.hooks._scenario_key
    :no-index:
 
 .. autofunction:: behave_priority.hooks.setup_priority
@@ -13,6 +13,7 @@ and behave's lifecycle. It exposes functions for ``before_all``,
 .. autofunction:: behave_priority.hooks.after_scenario_hook
 .. autofunction:: behave_priority.hooks.get_report
 .. autofunction:: behave_priority.hooks.priority_report
+.. autofunction:: behave_priority.hooks.cleanup_parallel_coord
 
 PriorityState
 -------------
@@ -50,6 +51,9 @@ State Fields
    * - ``sorter``
      - ``ScenarioSorter``
      - The sorter instance used to reorder scenarios.
+   * - ``coordinator``
+     - ``ParallelCoordinator | None``
+     - Optional parallel coordinator for cross-process fail-fast.
    * - ``failed_count``
      - ``int``
      - Number of failed scenarios so far.
@@ -74,6 +78,12 @@ State Fields
    * - ``rule_tag_map``
      - ``dict[str, list[str]]``
      - Maps scenario key to parent rule tags (Gherkin v6).
+   * - ``feature_tag_map``
+     - ``dict[str, list[str]]``
+     - Maps scenario key to parent feature tags.
+   * - ``missing_skip_warned``
+     - ``bool``
+     - Whether the missing ``scenario.skip()`` warning was already emitted.
 
 Fail-Fast Logic
 ---------------

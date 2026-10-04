@@ -58,6 +58,15 @@ class TestSortScenarios:
         sorter.sort([feature])
         assert feature.scenarios == [s1, s2, s3]
 
+    def test_scenarios_not_sorted_without_ordering(self) -> None:
+        config = PriorityConfig()
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("low", tags=["priority(3)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        feature = make_feature("F", scenarios=[s1, s2])
+        sorter.sort([feature])
+        assert feature.scenarios == [s1, s2]
+
     def test_sorts_by_scenario_priority(self) -> None:
         config = PriorityConfig(order=True)
         sorter = ScenarioSorter(config)

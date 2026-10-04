@@ -4,7 +4,8 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.1.x   | Yes       |
+| 1.x     | Yes       |
+| < 1.0   | No        |
 
 ## Reporting a vulnerability
 
@@ -28,18 +29,22 @@ You will receive a response within 48 hours. If the vulnerability is confirmed, 
 - Reorders scenario execution by parsing `@priority(N)` tags from `scenario.tags`
 - Uses `scenario.skip()` to skip scenarios when fail-fast triggers
 - Modifies behave's runner feature list in-place during `before_all`
+- Reads its own `BEHAVE_PRIORITY_*` environment variables for configuration
+- Writes JSON state files in the directory given by `BEHAVE_PRIORITY_COORD_DIR`
+  when parallel coordination is enabled
 
 ### What behave-priority does NOT do
 
 - Does not execute arbitrary code from tags
-- Does not modify files on disk
+- Does not modify source files or anything outside the coordination directory
 - Does not make network requests
-- Does not access environment variables or secrets
+- Does not access environment variables other than its own `BEHAVE_PRIORITY_*`
+  variables, and never accesses secrets
 
 ### Tag parsing
 
 Priority tags are parsed with strict regex validation. Invalid tags raise `PriorityParseError` — they never silently produce unexpected behavior.
 
-### Thread safety
+### Concurrency
 
-`PriorityQueue` uses `threading.Lock` for thread-safe operations. The sorter and hooks are not designed for concurrent access to the same runner instance.
+When behave runs with `--parallel`, each worker process gets an isolated `PriorityState`. Cross-process fail-fast coordination is opt-in (`parallel_coord=True`) and uses per-worker JSON files written atomically (temp file + rename), with no cross-process locking. The sorter and hooks are not designed for concurrent access to the same runner instance.

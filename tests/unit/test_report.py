@@ -215,6 +215,25 @@ class TestReportSummary:
         assert not hasattr(s, "__dict__")
 
 
+class TestEntries:
+    def test_empty_by_default(self) -> None:
+        report = PriorityReport(make_config())
+        assert report.entries == ()
+
+    def test_returns_recorded_entries(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="A")
+        record_scenario(report, name="B")
+        assert len(report.entries) == 2
+        assert report.entries[0].scenario_name == "A"
+        assert report.entries[1].scenario_name == "B"
+
+    def test_returns_immutable_tuple(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report)
+        assert isinstance(report.entries, tuple)
+
+
 class TestRecord:
     def test_single_record(self) -> None:
         report = PriorityReport(make_config())

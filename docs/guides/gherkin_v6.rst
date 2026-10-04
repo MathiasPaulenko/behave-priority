@@ -81,9 +81,11 @@ Critical Tags on Rules
 ----------------------
 
 When a Rule is tagged ``@critical``, all scenarios within that Rule are
-treated as critical. The ``rule_tag_map`` in ``PriorityState`` tracks
-rule tags per scenario, and ``after_scenario_hook`` combines
-``scenario.tags + rule_tags`` when evaluating ``is_critical``.
+treated as critical. The same applies to a ``@critical`` tag on the
+Feature itself. The ``rule_tag_map`` and ``feature_tag_map`` in
+``PriorityState`` track tags per scenario, and ``after_scenario_hook``
+combines ``scenario.tags + rule_tags + feature_tags`` when evaluating
+``is_critical``.
 
 Example:
 

@@ -61,19 +61,20 @@ Properties
 
 **``time_saved``**: Estimated time saved by fail-fast skipping. Since skipped
 scenarios have ``duration=0`` (they never ran), the saved time is estimated
-as the average duration of executed (non-skipped) scenarios multiplied by
-the number of skipped scenarios.
+using priority-bucketed averages: each skipped scenario's estimated duration
+is the average duration of executed scenarios in the same priority bucket
+(buckets of 100), falling back to the global average.
 
 .. code-block:: python
 
-   time_saved = avg(executed_durations) * skipped_count
+   time_saved = sum(avg(executed_in_bucket) for each skipped)
 
-**``pass_rate``**: Percentage of passed scenarios excluding skipped ones.
-Returns ``0.0`` when no scenarios were executed.
+**``pass_rate``**: Percentage of passed scenarios excluding skipped and
+undefined ones. Returns ``0.0`` when no scenarios were executed.
 
 .. code-block:: python
 
-   pass_rate = (passed / (total - skipped)) * 100
+   pass_rate = (passed / (total - skipped - undefined)) * 100
 
 PriorityReport
 --------------
@@ -100,6 +101,13 @@ Methods
      - Compute and return a ``ReportSummary`` with aggregate statistics.
    * - ``to_dict()``
      - Serialize the report to a dictionary (JSON-compatible).
+   * - ``to_json()``
+     - Serialize the report to a JSON string.
+   * - ``to_csv()``
+     - Serialize the entries to a CSV string (summary not included).
+
+The ``entries`` property returns the recorded ``ReportEntry`` objects as an
+immutable tuple, in execution order.
 
 Rendered Output
 ---------------
@@ -154,9 +162,11 @@ The ``to_dict()`` method returns a JSON-compatible dictionary:
            "failed": 1,
            "skipped": 1,
            "undefined": 0,
+           "untested": 0,
            "critical_total": 1,
            "critical_passed": 0,
            "critical_failed": 0,
+           "critical_skipped": 1,
            "total_duration": 1.68,
            "skipped_duration": 0.0,
            "pass_rate": 50.0,

@@ -112,6 +112,28 @@ class TestParallelCoordinator:
         assert not coord.should_stop(stop_after_failures=None, stop_on_critical=False)
         coord.cleanup()
 
+    def test_ignores_stale_worker_files(self, tmp_path: Path) -> None:
+        stale = tmp_path / "worker_old.json"
+        stale.write_text(
+            json.dumps(
+                {
+                    "failed_count": 10,
+                    "critical_failed": True,
+                    "created_at": 0.0,
+                }
+            )
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert not coord.should_stop(stop_after_failures=1, stop_on_critical=True)
+        coord.cleanup()
+
+    def test_ignores_worker_files_without_created_at(self, tmp_path: Path) -> None:
+        legacy = tmp_path / "worker_legacy.json"
+        legacy.write_text(json.dumps({"failed_count": 10, "critical_failed": True}))
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert not coord.should_stop(stop_after_failures=1, stop_on_critical=True)
+        coord.cleanup()
+
 
 class TestCreateCoordinator:
     """Tests for create_coordinator factory function."""

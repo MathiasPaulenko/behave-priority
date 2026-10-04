@@ -62,16 +62,28 @@ Configuration Fields
      - ``False``
      - Print the execution report after the run via
        :func:`~behave_priority.priority_report`.
+   * - ``report_format``
+     - ``"text" | "json" | "csv"``
+     - ``"text"``
+     - Output format for the report. ``"json"`` includes entries and summary;
+       ``"csv"`` writes one row per scenario entry.
+   * - ``parallel_coord``
+     - ``bool``
+     - ``False``
+     - Enable cross-process fail-fast coordination via the
+       ``BEHAVE_PRIORITY_COORD_DIR`` environment variable.
 
 Validation
 ----------
 
 The following validations are performed at construction time:
 
-- ``stop_after_failures`` must be a positive integer or ``None``.
+- ``stop_after_failures`` must be a positive integer or ``None``
+  (booleans and floats are rejected).
 - ``critical_tag`` must not be an empty string.
 - ``priority_tag`` must not be an empty string if provided (``None`` is valid).
 - ``default_priority`` must be non-negative.
+- ``report_format`` must be one of ``"text"``, ``"json"``, ``"csv"``.
 
 Invalid values raise ``ValueError`` with a descriptive message.
 

@@ -155,6 +155,14 @@ class TestValidation:
         with pytest.raises(ValueError, match="stop_after_failures"):
             PriorityConfig(stop_after_failures=-5)
 
+    def test_stop_after_failures_float_raises(self) -> None:
+        with pytest.raises(ValueError, match="stop_after_failures"):
+            PriorityConfig(stop_after_failures=1.5)  # type: ignore[arg-type]
+
+    def test_stop_after_failures_bool_raises(self) -> None:
+        with pytest.raises(ValueError, match="stop_after_failures"):
+            PriorityConfig(stop_after_failures=True)  # type: ignore[arg-type]
+
 
 class TestImmutability:
     def test_frozen_setattr_raises(self) -> None:

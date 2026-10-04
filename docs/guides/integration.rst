@@ -142,7 +142,9 @@ If scenarios are not being reordered, check:
 2. **Runner is accessible**: If behave's internal structure changes, the
    function emits a ``RuntimeWarning`` and returns without sorting.
 
-3. **``order=True`` is set**: Without ``order=True``, no sorting occurs.
+3. **Ordering is enabled**: Sorting only occurs when ``order=True``,
+   ``reverse=True``, or ``priority_tag`` is set. With none of them, scenarios
+   run in file order.
 
 4. **Tags are correctly formatted**: ``@priority(1)`` not ``@priority=1``
    or ``@priority:1``.

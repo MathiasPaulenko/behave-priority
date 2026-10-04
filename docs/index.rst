@@ -151,8 +151,9 @@ Tag Reference
      - Feature
      - Sets the default priority for all scenarios in the feature.
    * - ``@critical``
-     - Scenario, Rule
-     - Marks the scenario as critical. Fail-fast can trigger on critical failures.
+     - Scenario, Rule, Feature
+     - Marks the scenario as critical (also applies to all scenarios in a
+       tagged Rule or Feature). Fail-fast can trigger on critical failures.
    * - ``@smoke`` (or any tag)
      - Scenario
      - Can be configured as ``priority_tag`` to run those scenarios first.

@@ -56,9 +56,13 @@ class ScenarioSorter:
     def sort(self, features: list[FeatureLike]) -> list[FeatureLike]:
         """Sort features and their scenarios by priority.
 
-        Each feature's ``scenarios`` list and ``run_items`` list (if present)
-        are reordered in-place. The features list itself is also sorted
-        when ordering is enabled.
+        Sorting is only applied when ordering is enabled via ``order``,
+        ``reverse``, or ``priority_tag`` in the config. Otherwise the
+        features are returned unchanged.
+
+        When enabled, each feature's ``scenarios`` list and ``run_items``
+        list (if present) are reordered in-place, and the features list
+        itself is sorted by each feature's best run item.
 
         The sort is **stable**: scenarios with the same priority preserve
         their original relative order. This ensures that Scenario Outlines
@@ -72,8 +76,12 @@ class ScenarioSorter:
             features: List of features to sort.
 
         Returns:
-            A new list of features sorted by priority.
+            A new list of features sorted by priority, or the input list
+            unchanged when ordering is disabled.
         """
+        if not (self._config.order or self._config.reverse or self._config.priority_tag):
+            return features
+
         for feature in features:
             sorted_scenarios = self._sort_scenarios(feature.scenarios, feature.tags)
             feature.scenarios = sorted_scenarios
@@ -84,10 +92,7 @@ class ScenarioSorter:
                 sorted_items = self._sort_run_items(run_items, feature.tags)
                 feature_obj.run_items = sorted_items
 
-        if self._config.order or self._config.reverse or self._config.priority_tag:
-            features = sorted(features, key=self._feature_sort_key)
-
-        return features
+        return sorted(features, key=self._feature_sort_key)
 
     def _sort_run_items(self, run_items: list[Any], feature_tags: list[str]) -> list[Any]:
         """Sort run_items, recursing into Rule objects.

@@ -95,6 +95,15 @@ class PriorityReport:
         self._config = config
         self._entries: list[ReportEntry] = []
 
+    @property
+    def entries(self) -> tuple[ReportEntry, ...]:
+        """Recorded scenario entries, in execution order.
+
+        Returns:
+            A tuple of ``ReportEntry`` objects.
+        """
+        return tuple(self._entries)
+
     def record(
         self,
         *,

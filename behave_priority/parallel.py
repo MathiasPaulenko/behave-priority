@@ -23,9 +23,15 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import time
 from pathlib import Path
 
 _COORD_DIR_ENV = "BEHAVE_PRIORITY_COORD_DIR"
+
+# Worker files created more than this many seconds before this coordinator
+# started are considered stale (e.g. left behind by a crashed previous run)
+# and are ignored when aggregating global state.
+_CLOCK_SKEW_S = 120.0
 
 
 class ParallelCoordinator:
@@ -59,6 +65,7 @@ class ParallelCoordinator:
         self._worker_file = self.coord_dir / f"worker_{self.worker_id}.json"
         self._failed_count = 0
         self._critical_failed = False
+        self._started_at = time.time()
         self._write_state()
 
     def report_failure(self, *, is_critical: bool = False) -> None:
@@ -82,7 +89,9 @@ class ParallelCoordinator:
         """Check if global fail-fast conditions have been met.
 
         Reads all worker files in the coordination directory and
-        aggregates failure counts and critical-failure flags.
+        aggregates failure counts and critical-failure flags. Files
+        that fail to parse, or that were created before this run
+        (stale files left by a crashed previous run), are ignored.
 
         Args:
             stop_after_failures: Global failure threshold, or None.
@@ -93,15 +102,19 @@ class ParallelCoordinator:
         """
         global_failed = 0
         global_critical = False
+        min_created_at = self._started_at - _CLOCK_SKEW_S
 
         for f in self.coord_dir.glob("worker_*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
-                global_failed += data.get("failed_count", 0)
-                if data.get("critical_failed", False):
-                    global_critical = True
             except (json.JSONDecodeError, OSError):
                 continue
+            created_at = data.get("created_at")
+            if not isinstance(created_at, int | float) or created_at < min_created_at:
+                continue
+            global_failed += data.get("failed_count", 0)
+            if data.get("critical_failed", False):
+                global_critical = True
 
         if stop_after_failures is not None and global_failed >= stop_after_failures:
             return True
@@ -117,6 +130,7 @@ class ParallelCoordinator:
         data = {
             "failed_count": self._failed_count,
             "critical_failed": self._critical_failed,
+            "created_at": self._started_at,
         }
         tmp = self._worker_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(data), encoding="utf-8")

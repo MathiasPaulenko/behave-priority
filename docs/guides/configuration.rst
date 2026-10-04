@@ -32,6 +32,8 @@ All available options:
        critical_tag="critical", # Custom critical tag name
        default_priority=999,    # Priority for untagged scenarios
        report=True,             # Print report after run
+       report_format="text",    # "text" | "json" | "csv"
+       parallel_coord=False,    # Cross-process fail-fast coordination
    )
 
 Option Details
@@ -44,7 +46,8 @@ When ``True``, scenarios within each feature are sorted by their resolved
 priority. Features are also sorted by their best (lowest) scenario priority.
 
 When ``False``, no sorting occurs. Scenarios run in behave's default order
-(file order).
+(file order), unless ``reverse`` or ``priority_tag`` are set — both options
+also enable sorting.
 
 reverse
 ~~~~~~~
@@ -53,7 +56,8 @@ When ``True``, the sort order is reversed: higher priority numbers run first.
 This is useful when priority represents severity (e.g. priority 5 = most
 severe = should run first).
 
-Only effective when ``order=True``.
+Setting ``reverse=True`` enables sorting on its own; it does not require
+``order=True``.
 
 priority_tag
 ~~~~~~~~~~~~
@@ -64,6 +68,9 @@ their priority number. Scenarios with this tag get a primary sort key of
 
 Common use case: ``priority_tag="smoke"`` runs all ``@smoke`` scenarios
 before any other scenarios, even if they have higher priority numbers.
+
+Setting ``priority_tag`` enables sorting on its own; it does not require
+``order=True``.
 
 stop_after_failures
 ~~~~~~~~~~~~~~~~~~~
@@ -110,6 +117,26 @@ When ``True``, the execution report is printed to stdout via
 
 The report can also be accessed programmatically via ``get_report(context)``
 regardless of this setting.
+
+The report is written to the real stdout, so it stays visible even when
+behave captures output during hooks (the default).
+
+report_format
+~~~~~~~~~~~~~
+
+Controls the output format of the report printed by ``priority_report``:
+
+- ``"text"`` (default) — human-readable table with summary.
+- ``"json"`` — machine-readable JSON with entries and summary.
+- ``"csv"`` — one row per scenario entry (no summary).
+
+parallel_coord
+~~~~~~~~~~~~~~
+
+When ``True``, workers coordinate fail-fast across processes using JSON
+files in the directory named by the ``BEHAVE_PRIORITY_COORD_DIR``
+environment variable. If the variable is not set, a warning is emitted and
+coordination is disabled. See :doc:`/modules/parallel` for details.
 
 Environment Variables
 ---------------------

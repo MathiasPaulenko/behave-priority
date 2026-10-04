@@ -80,22 +80,20 @@ Coverage must stay >= 90%.
 ```text
 behave_priority/          # Source code
 ├── __init__.py           # Public exports
-├── exceptions.py         # PriorityError, StopExecutionError, PriorityParseError
+├── exceptions.py         # PriorityError, PriorityParseError
 ├── config.py             # PriorityConfig (frozen dataclass)
 ├── parser.py             # Tag priority parsing
-├── queue.py              # PriorityQueue (thread-safe, heapq-based)
 ├── sorter.py             # ScenarioSorter
 ├── hooks.py              # setup_priority, hook functions, PriorityState
+├── parallel.py           # ParallelCoordinator (cross-process fail-fast)
 └── report.py             # PriorityReport, ReportEntry, ReportSummary
 
 tests/
 ├── unit/                 # Unit tests (fakes for behave objects)
-└── integration/          # Integration tests (subprocess behave runs)
+├── integration/          # Integration tests (subprocess behave runs)
+└── e2e/                  # E2E tests (real .feature files + environment.py)
 
-ref/                      # Reference documents (not shipped)
-├── project.md            # Project overview
-├── design.md             # Design document
-└── fases.md              # Development phases
+docs/                     # Sphinx documentation
 ```
 
 ## Reporting bugs

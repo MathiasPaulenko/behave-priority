@@ -106,7 +106,7 @@ Parsing scenario priority:
    from behave_priority import parse_priority
 
    parse_priority(["smoke", "priority(1)"])      # → 1
-   parse_priority(["priority(3)", "priority(1)"])  # → 3 (first match)
+   parse_priority(["priority(3)", "priority(1)"])  # → 1 (lowest wins)
    parse_priority(["smoke"])                      # → None
    parse_priority(["priority(abc)"])              # → raises PriorityParseError
 

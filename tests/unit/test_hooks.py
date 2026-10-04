@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -189,11 +189,10 @@ class TestSetupPriority:
         assert state.priority_map[_scenario_key(s1)] == 1
         assert state.priority_map[_scenario_key(s2)] == 5
 
-    def test_no_runner_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_no_runner_warns(self) -> None:
         ctx = FakeContext(_runner=None, runner=None)
-        with caplog.at_level(logging.WARNING, logger="behave_priority.hooks"):
+        with pytest.warns(RuntimeWarning, match="cannot access behave's runner"):
             setup_priority(ctx)
-        assert "cannot access behave's runner" in caplog.text
         assert ctx._priority_state is None
 
     def test_no_features_returns_silently(self) -> None:
@@ -202,11 +201,10 @@ class TestSetupPriority:
         setup_priority(ctx)
         assert ctx._priority_state is not None
 
-    def test_no_features_attr_warns(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_no_features_attr_warns(self) -> None:
         ctx = FakeContext(_runner=object())
-        with caplog.at_level(logging.WARNING, logger="behave_priority.hooks"):
+        with pytest.warns(RuntimeWarning, match="no 'features'"):
             setup_priority(ctx)
-        assert "no 'features'" in caplog.text
         assert ctx._priority_state is None
 
     def test_runner_via_runner_attr(self) -> None:
@@ -346,9 +344,20 @@ class TestSetupPriority:
         runner = FakeRunner(features=[feature])
         ctx = FakeContext(_runner=runner)
         monkeypatch.setenv("BEHAVE_PRIORITY_PARALLEL_COORD", "1")
-        setup_priority(ctx)
+        monkeypatch.delenv("BEHAVE_PRIORITY_COORD_DIR", raising=False)
+        with pytest.warns(RuntimeWarning, match="BEHAVE_PRIORITY_COORD_DIR"):
+            setup_priority(ctx)
         state = ctx._priority_state
         assert state.config.parallel_coord is True
+
+    def test_env_var_stop_after_invalid_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        s1 = FakeScenario("a")
+        feature = FakeFeature("F", "f.feature", scenarios=[s1])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        monkeypatch.setenv("BEHAVE_PRIORITY_STOP_AFTER", "abc")
+        with pytest.raises(ValueError, match="BEHAVE_PRIORITY_STOP_AFTER"):
+            setup_priority(ctx)
 
     def test_explicit_args_override_env_vars(self, monkeypatch: pytest.MonkeyPatch) -> None:
         s1 = FakeScenario("a")
@@ -421,6 +430,25 @@ class TestBeforeScenarioHook:
         assert state.should_stop is True
         coord.cleanup()
         other.cleanup()
+
+    def test_missing_skip_method_warns_once(self) -> None:
+        state = make_state()
+        state.should_stop = True
+        ctx = FakeContext(_priority_state=state)
+
+        class NoSkipScenario:
+            name = "s"
+            tags: list[str] = []
+            status = "passed"
+
+        scenario = NoSkipScenario()
+        with pytest.warns(RuntimeWarning, match="no 'skip' method"):
+            before_scenario_hook(ctx, scenario)
+        assert state.skipped_count == 1
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            before_scenario_hook(ctx, scenario)
+        assert state.skipped_count == 2
 
     def test_skipped_records_feature_name(self) -> None:
         state = make_state()
@@ -574,46 +602,38 @@ class TestAfterScenarioHook:
 
 
 class TestPriorityReportFunction:
-    def test_no_state_does_nothing(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_no_state_does_nothing(self, capfd: pytest.CaptureFixture[str]) -> None:
         ctx = FakeContext(_priority_state=None)
-        with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
-            priority_report(ctx)
-        assert caplog.text == ""
+        priority_report(ctx)
+        assert capfd.readouterr().out == ""
 
-    def test_prints_when_report_enabled(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_prints_when_report_enabled(self, capfd: pytest.CaptureFixture[str]) -> None:
         state = make_state(PriorityConfig(report=True))
         ctx = FakeContext(_priority_state=state)
-        with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
-            priority_report(ctx)
-        assert "Priority Execution Report" in caplog.text
+        priority_report(ctx)
+        assert "Priority Execution Report" in capfd.readouterr().out
 
-    def test_does_not_print_when_report_disabled(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_does_not_print_when_report_disabled(self, capfd: pytest.CaptureFixture[str]) -> None:
         state = make_state(PriorityConfig(report=False))
         ctx = FakeContext(_priority_state=state)
-        with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
-            priority_report(ctx)
-        assert caplog.text == ""
+        priority_report(ctx)
+        assert capfd.readouterr().out == ""
 
-    def test_json_format_outputs_json(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_json_format_outputs_json(self, capfd: pytest.CaptureFixture[str]) -> None:
         state = make_state(PriorityConfig(report=True, report_format="json"))
         ctx = FakeContext(_priority_state=state)
-        with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
-            priority_report(ctx)
+        priority_report(ctx)
         import json as json_mod
 
-        messages = [r.getMessage() for r in caplog.records]
-        text = "\n".join(messages).strip()
-        data = json_mod.loads(text)
+        data = json_mod.loads(capfd.readouterr().out)
         assert "entries" in data
         assert "summary" in data
 
-    def test_csv_format_outputs_csv(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_csv_format_outputs_csv(self, capfd: pytest.CaptureFixture[str]) -> None:
         state = make_state(PriorityConfig(report=True, report_format="csv"))
         ctx = FakeContext(_priority_state=state)
-        with caplog.at_level(logging.INFO, logger="behave_priority.hooks"):
-            priority_report(ctx)
-        messages = [r.getMessage() for r in caplog.records]
-        text = "\n".join(messages).strip()
+        priority_report(ctx)
+        text = capfd.readouterr().out
         assert "index" in text
         assert "scenario_name" in text
         assert "status" in text

@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-390%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-409%20passed-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen.svg)]()
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue.svg)]()
 [![ruff](https://img.shields.io/badge/ruff-passing-brightgreen.svg)]()
@@ -38,11 +38,13 @@ In CI, if critical tests fail, you waste time waiting for the full regression su
 - `order=True` — executes scenarios from highest to lowest priority
 - `priority_tag="smoke"` — executes scenarios with that tag first, then the rest
 - `reverse=True` — executes lowest priority first (useful for debugging)
+- With none of them set, scenarios run in file order. `reverse` and `priority_tag` each enable sorting on their own — `order` is not required.
 
 ### Fail-fast
 
 - `stop_after_failures=N` — stops execution after N failed scenarios
 - `stop_on_critical=True` — stops if any `@critical` scenario fails
+- `@critical` also works at `Feature` and `Rule` level, marking all scenarios inside
 - Combines with `order=True`: run critical first, stop if they fail, skip regression
 
 ### Parallel coordination
@@ -199,9 +201,35 @@ behave
 - `priority_report(context)` — prints execution report in `after_all`
 - `cleanup_parallel_coord(context)` — removes worker file from coordination directory in `after_all`
 
+`priority_report` writes to the real stdout, so the report stays visible even with behave's output capture enabled.
+
+### `get_report(context)`
+
+Returns the `PriorityReport` for the run (or `None` if `setup_priority` wasn't called). Useful in `after_all` for custom processing:
+
+```python
+def after_all(context):
+    report = get_report(context)
+    if report:
+        data = report.to_dict()      # dict: {"entries": [...], "summary": {...}}
+        json_str = report.to_json()  # same as to_dict, as JSON string
+        csv_str = report.to_csv()    # one row per scenario (no summary)
+        for entry in report.entries: # tuple of ReportEntry, in execution order
+            print(entry.scenario_name, entry.status)
+        summary = report.summary()   # ReportSummary with aggregates
+```
+
 ### `PriorityConfig`
 
 Immutable frozen dataclass with all configuration options. Can be constructed directly for advanced use cases.
+
+### Other public classes
+
+- `PriorityReport` — collects execution results; `entries`, `summary()`, `render()`, `to_dict()`, `to_json()`, `to_csv()`
+- `ReportEntry` — one recorded scenario (name, priority, status, duration, `is_critical`)
+- `ReportSummary` — aggregate stats (counts, `pass_rate`, `time_saved`, critical counters)
+- `ScenarioSorter` — reorders behave's runner; used internally by `setup_priority`
+- `ParallelCoordinator` — file-based cross-process fail-fast state; used internally
 
 ### Parser functions
 

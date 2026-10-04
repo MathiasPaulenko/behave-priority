@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import logging
 import os
+import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,8 +17,6 @@ from behave_priority.parallel import (
 from behave_priority.parser import is_critical, resolve_priority
 from behave_priority.report import PriorityReport
 from behave_priority.sorter import ScenarioSorter
-
-logger = logging.getLogger(__name__)
 
 
 def _scenario_key(scenario: Any) -> str:
@@ -110,6 +109,8 @@ class PriorityState:
         feature_map: Maps scenario key to parent feature name.
         rule_tag_map: Maps scenario key to parent rule tags (Gherkin v6).
         feature_tag_map: Maps scenario key to parent feature tags.
+        missing_skip_warned: Whether the missing ``scenario.skip()``
+            warning has already been emitted (warned once per run).
     """
 
     config: PriorityConfig
@@ -125,6 +126,7 @@ class PriorityState:
     feature_map: dict[str, str] = field(default_factory=dict)
     rule_tag_map: dict[str, list[str]] = field(default_factory=dict)
     feature_tag_map: dict[str, list[str]] = field(default_factory=dict)
+    missing_skip_warned: bool = False
 
     def check_fail_fast(self) -> bool:
         """Check if fail-fast conditions are met.
@@ -197,7 +199,13 @@ def setup_priority(
         stop_on_critical = os.environ.get("BEHAVE_PRIORITY_FAIL_FAST", "0") == "1"
     if stop_after_failures is None:
         val = os.environ.get("BEHAVE_PRIORITY_STOP_AFTER")
-        stop_after_failures = int(val) if val else None
+        if val:
+            try:
+                stop_after_failures = int(val)
+            except ValueError:
+                raise ValueError(
+                    f"BEHAVE_PRIORITY_STOP_AFTER must be an integer, got {val!r}"
+                ) from None
     if report is None:
         report = os.environ.get("BEHAVE_PRIORITY_REPORT", "0") == "1"
     if parallel_coord is None:
@@ -220,11 +228,13 @@ def setup_priority(
     if runner is None:
         runner = getattr(context, "runner", None)
     if runner is None:
-        logger.warning(
+        warnings.warn(
             "cannot access behave's runner. "
             "Scenarios will NOT be reordered and priority hooks "
             "will have no effect. Ensure this is called from "
-            "before_all() in environment.py."
+            "before_all() in environment.py.",
+            RuntimeWarning,
+            stacklevel=2,
         )
         return
 
@@ -232,8 +242,11 @@ def setup_priority(
     if features is None:
         features = getattr(runner, "feature_list", None)
     if features is None:
-        logger.warning(
-            "runner has no 'features' or 'feature_list' attribute. Scenarios will NOT be reordered."
+        warnings.warn(
+            "runner has no 'features' or 'feature_list' attribute. "
+            "Scenarios will NOT be reordered.",
+            RuntimeWarning,
+            stacklevel=2,
         )
         return
 
@@ -270,10 +283,12 @@ def setup_priority(
             state.coordinator = coordinator
             context._priority_coordinator = coordinator
         else:
-            logger.warning(
+            warnings.warn(
                 "parallel_coord=True but BEHAVE_PRIORITY_COORD_DIR "
                 "env var is not set. Cross-process coordination "
-                "will not be active."
+                "will not be active.",
+                RuntimeWarning,
+                stacklevel=2,
             )
 
 
@@ -299,6 +314,14 @@ def before_scenario_hook(context: Any, scenario: Any) -> None:
         state.skipped_count += 1
         if hasattr(scenario, "skip"):
             scenario.skip("fail-fast triggered")
+        elif not state.missing_skip_warned:
+            state.missing_skip_warned = True
+            warnings.warn(
+                "scenario object has no 'skip' method; fail-fast cannot "
+                "mark scenarios as skipped on this behave version",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
 
 def after_scenario_hook(context: Any, scenario: Any) -> None:
@@ -376,6 +399,9 @@ def priority_report(context: Any) -> None:
     """Print the priority execution report.
 
     Intended for use as ``after_all`` in behave's ``environment.py``.
+    Writes to ``sys.__stdout__`` (falling back to ``sys.stdout``) so the
+    report stays visible even when behave's output capture is enabled,
+    which is the default — behave captures stdout/stderr during hooks.
 
     Args:
         context: Behave's context object.
@@ -385,13 +411,14 @@ def priority_report(context: Any) -> None:
         return
 
     if state.config.report:
+        stream = sys.__stdout__ if sys.__stdout__ is not None else sys.stdout
         fmt = state.config.report_format
         if fmt == "json":
-            logger.info("\n%s", state.report.to_json())
+            print(state.report.to_json(), file=stream, flush=True)
         elif fmt == "csv":
-            logger.info("\n%s", state.report.to_csv())
+            print(state.report.to_csv(), end="", file=stream, flush=True)
         else:
-            logger.info("\n%s", state.report.render())
+            print(state.report.render(), end="", file=stream, flush=True)
 
 
 def cleanup_parallel_coord(context: Any) -> None:
