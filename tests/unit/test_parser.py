@@ -37,6 +37,28 @@ class TestParsePriority:
         with pytest.raises(PriorityParseError, match="Invalid priority tag"):
             parse_priority(["priority(abc)"])
 
+    def test_extremely_large_priority_raises_parse_error(self) -> None:
+        # Regression: int() raises ValueError when the digit string
+        # exceeds sys.get_int_max_str_digits(); it must surface as a
+        # PriorityParseError, not a bare ValueError.
+        huge = "9" * 5000
+        with pytest.raises(PriorityParseError, match="Invalid priority tag"):
+            parse_priority([f"priority({huge})"])
+
+    def test_non_string_tag_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="tag must be a string"):
+            parse_priority([None])  # type: ignore[list-item]
+
+    def test_string_input_raises_type_error(self) -> None:
+        # A str is iterable over characters; it must not be silently
+        # accepted as a tag list.
+        with pytest.raises(TypeError, match="iterable of strings"):
+            parse_priority("priority(1)")  # type: ignore[arg-type]
+
+    def test_non_iterable_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="iterable of strings"):
+            parse_priority(None)  # type: ignore[arg-type]
+
     def test_no_parens_ignored(self) -> None:
         assert parse_priority(["priority"]) is None
 
@@ -138,6 +160,15 @@ class TestParseFeaturePriority:
 
     def test_at_prefix_feature_priority(self) -> None:
         assert parse_feature_priority(["@feature-priority(3)"]) == 3
+
+    def test_extremely_large_feature_priority_raises_parse_error(self) -> None:
+        huge = "9" * 5000
+        with pytest.raises(PriorityParseError, match="Invalid feature-priority tag"):
+            parse_feature_priority([f"feature-priority({huge})"])
+
+    def test_string_input_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="iterable of strings"):
+            parse_feature_priority("feature-priority(1)")  # type: ignore[arg-type]
 
 
 class TestResolvePriority:
@@ -328,3 +359,24 @@ class TestIsCritical:
 
     def test_whitespace_around_critical_tag(self) -> None:
         assert is_critical(["  critical  "]) is True
+
+    def test_leading_whitespace_before_at_prefix(self) -> None:
+        # Regression: whitespace was stripped only after removing '@',
+        # so ' @critical' never matched.
+        assert is_critical([" @critical"]) is True
+
+    def test_whitespace_on_both_sides_of_at_prefix(self) -> None:
+        assert is_critical(["  @critical  "]) is True
+
+    def test_leading_whitespace_before_at_custom_tag(self) -> None:
+        assert is_critical([" @critico"], critical_tag="critico") is True
+
+    def test_non_string_tag_raises_type_error(self) -> None:
+        with pytest.raises(TypeError, match="tag must be a string"):
+            is_critical([None])  # type: ignore[list-item]
+
+    def test_string_input_raises_type_error(self) -> None:
+        # 'is_critical("critical")' previously iterated characters and
+        # silently returned False.
+        with pytest.raises(TypeError, match="iterable of strings"):
+            is_critical("critical")  # type: ignore[arg-type]

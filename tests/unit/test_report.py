@@ -274,8 +274,157 @@ class TestRecord:
         record_scenario(report)
         assert report._entries[0].is_critical is False
 
+    def test_record_coerces_non_string_names(self) -> None:
+        # Regression: non-str names crashed render() via len().
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name=123,  # type: ignore[arg-type]
+            feature_name=None,  # type: ignore[arg-type]
+            priority=1,
+            status="passed",
+            duration=1.0,
+            is_critical=False,
+        )
+        entry = report.entries[0]
+        assert entry.scenario_name == "123"
+        assert entry.feature_name == "None"
+        report.render()
+        report.to_csv()
+
+    def test_record_sanitizes_nan_duration(self) -> None:
+        # Regression: NaN durations produced invalid JSON literals.
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name="s",
+            feature_name="f",
+            priority=1,
+            status="passed",
+            duration=float("nan"),
+            is_critical=False,
+        )
+        assert report.entries[0].duration == 0.0
+        out = report.to_json()
+        assert "NaN" not in out
+        assert '"duration": 0.0' in out
+
+    def test_record_sanitizes_infinite_duration(self) -> None:
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name="s",
+            feature_name="f",
+            priority=1,
+            status="passed",
+            duration=float("inf"),
+            is_critical=False,
+        )
+        assert report.entries[0].duration == 0.0
+        assert "Infinity" not in report.to_json()
+
+    def test_record_negative_duration_clamped(self) -> None:
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name="s",
+            feature_name="f",
+            priority=1,
+            status="passed",
+            duration=-5.0,
+            is_critical=False,
+        )
+        assert report.entries[0].duration == 0.0
+
+    def test_record_non_numeric_duration_defaults(self) -> None:
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name="s",
+            feature_name="f",
+            priority=1,
+            status="passed",
+            duration="x",  # type: ignore[arg-type]
+            is_critical=False,
+        )
+        assert report.entries[0].duration == 0.0
+
+    def test_record_coerces_non_string_status(self) -> None:
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name="s",
+            feature_name="f",
+            priority=1,
+            status=42,  # type: ignore[arg-type]
+            duration=1.0,
+            is_critical=False,
+        )
+        assert report.entries[0].status == "42"
+        report.render()
+
+    def test_record_coerces_is_critical(self) -> None:
+        report = PriorityReport(make_config())
+        report.record(
+            scenario_name="s",
+            feature_name="f",
+            priority=1,
+            status="passed",
+            duration=1.0,
+            is_critical="yes",  # type: ignore[arg-type]
+        )
+        assert report.entries[0].is_critical is True
+
+    def test_record_rejects_non_int_priority(self) -> None:
+        # A non-int priority would corrupt '//' bucket math and JSON.
+        report = PriorityReport(make_config())
+        with pytest.raises(TypeError, match="priority must be an integer"):
+            report.record(
+                scenario_name="s",
+                feature_name="f",
+                priority="high",  # type: ignore[arg-type]
+                status="passed",
+                duration=1.0,
+                is_critical=False,
+            )
+
+    def test_record_rejects_bool_priority(self) -> None:
+        report = PriorityReport(make_config())
+        with pytest.raises(TypeError, match="priority must be an integer"):
+            report.record(
+                scenario_name="s",
+                feature_name="f",
+                priority=True,  # type: ignore[arg-type]
+                status="passed",
+                duration=1.0,
+                is_critical=False,
+            )
+
+    def test_record_rejects_float_priority(self) -> None:
+        report = PriorityReport(make_config())
+        with pytest.raises(TypeError, match="priority must be an integer"):
+            report.record(
+                scenario_name="s",
+                feature_name="f",
+                priority=1.5,  # type: ignore[arg-type]
+                status="passed",
+                duration=1.0,
+                is_critical=False,
+            )
+
 
 class TestSummary:
+    def test_error_statuses_count_as_failed(self) -> None:
+        # Behave maps hook/cleanup/step errors to a failed run, so the
+        # summary must count them as failures, not as untested.
+        report = PriorityReport(make_config())
+        for status in ("failed", "error", "hook_error", "cleanup_error", "pending"):
+            record_scenario(report, name=status, status=status)
+        s = report.summary()
+        assert s.failed == 5
+        assert s.untested == 0
+
+    def test_critical_error_statuses_count_as_failed(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="c", status="hook_error", is_critical=True)
+        s = report.summary()
+        assert s.critical_failed == 1
+        assert s.failed == 1
+
     def test_empty_report(self) -> None:
         report = PriorityReport(make_config())
         s = report.summary()
@@ -407,6 +556,19 @@ class TestRender:
         output = report.render()
         assert "Critical:" in output
         assert "1/2 passed" in output
+
+    def test_render_critical_skipped_count(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="c1", status="skipped", is_critical=True)
+        output = report.render()
+        assert "Critical:" in output
+        assert "1 skipped" in output
+
+    def test_render_undefined_count(self) -> None:
+        report = PriorityReport(make_config())
+        record_scenario(report, name="u1", status="undefined")
+        output = report.render()
+        assert "1 undefined" in output
 
     def test_render_no_critical_section_when_none(self) -> None:
         report = PriorityReport(make_config())

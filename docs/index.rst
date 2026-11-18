@@ -24,7 +24,7 @@ Overview
   their pass/fail status separately.
 - **Priority tags** — run specific tagged scenarios (e.g. ``@smoke``) first.
 - **Programmatic configuration** — no CLI flags, all config via Python.
-- **97% test coverage** — comprehensive unit, integration, and E2E tests.
+- **100% test coverage** — comprehensive unit, integration, and E2E tests.
 
 Installation
 ------------

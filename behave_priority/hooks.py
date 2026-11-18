@@ -13,10 +13,19 @@ from behave_priority.parallel import (
     ParallelCoordinator,
     cleanup_coordinator,
     create_coordinator,
+    get_coord_dir,
 )
 from behave_priority.parser import is_critical, resolve_priority
 from behave_priority.report import PriorityReport
 from behave_priority.sorter import ScenarioSorter
+
+# Statuses that count toward fail-fast thresholds. Behave maps
+# hook/cleanup/step errors and undefined steps to a failed run, so
+# counting only literal "failed" would let a broken suite run to
+# completion without ever triggering fail-fast.
+_FAILURE_STATUSES = frozenset(
+    {"failed", "error", "hook_error", "cleanup_error", "undefined", "pending"}
+)
 
 
 def _scenario_key(scenario: Any) -> str:
@@ -68,7 +77,10 @@ def _map_scenario(
         for example in expanded:
             key = _scenario_key(example)
             state.priority_map[key] = resolve_priority(
-                example.tags, feature_tags, config, effective_rule_tags
+                getattr(example, "tags", None) or [],
+                feature_tags,
+                config,
+                effective_rule_tags,
             )
             state.feature_map[key] = feature_name
             state.rule_tag_map[key] = effective_rule_tags
@@ -76,7 +88,10 @@ def _map_scenario(
     else:
         key = _scenario_key(scenario)
         state.priority_map[key] = resolve_priority(
-            scenario.tags, feature_tags, config, effective_rule_tags
+            getattr(scenario, "tags", None) or [],
+            feature_tags,
+            config,
+            effective_rule_tags,
         )
         state.feature_map[key] = feature_name
         state.rule_tag_map[key] = effective_rule_tags
@@ -100,7 +115,7 @@ class PriorityState:
         sorter: The scenario sorter instance.
         coordinator: Optional parallel coordinator for cross-process
             fail-fast. None when ``parallel_coord`` is disabled.
-        failed_count: Number of failed scenarios so far.
+        failed_count: Number of failed or errored scenarios so far.
         critical_failed: Whether any critical scenario has failed.
         should_stop: Whether fail-fast conditions have been triggered.
         executed_count: Number of scenarios actually executed.
@@ -178,8 +193,9 @@ def setup_priority(
         reverse: Reverse sort order (lowest priority first). If ``None``,
             reads ``BEHAVE_PRIORITY_REVERSE`` (default ``0``).
         priority_tag: Tag name to run first (e.g. ``"smoke"``).
-        stop_after_failures: Stop after N failed scenarios. If ``None``,
-            reads ``BEHAVE_PRIORITY_STOP_AFTER`` (default disabled).
+        stop_after_failures: Stop after N failed or errored scenarios.
+            If ``None``, reads ``BEHAVE_PRIORITY_STOP_AFTER`` (default
+            disabled).
         stop_on_critical: Stop if any critical scenario fails. If ``None``,
             reads ``BEHAVE_PRIORITY_FAIL_FAST`` (default ``0``).
         critical_tag: Tag name that marks a scenario as critical.
@@ -238,8 +254,10 @@ def setup_priority(
         )
         return
 
+    features_attr = "features"
     features = getattr(runner, "features", None)
     if features is None:
+        features_attr = "feature_list"
         features = getattr(runner, "feature_list", None)
     if features is None:
         warnings.warn(
@@ -252,7 +270,19 @@ def setup_priority(
 
     sorter = ScenarioSorter(config)
     sorted_features = sorter.sort(features)
-    features[:] = sorted_features
+    try:
+        features[:] = sorted_features
+    except TypeError:
+        # The runner's feature collection is not a mutable sequence
+        # (e.g. a tuple or a custom object): try replacing the attribute.
+        try:
+            setattr(runner, features_attr, sorted_features)
+        except AttributeError:
+            warnings.warn(
+                "runner's feature collection is not mutable. Scenarios will NOT be reordered.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
 
     priority_report_obj = PriorityReport(config)
     state = PriorityState(
@@ -262,18 +292,19 @@ def setup_priority(
     )
 
     for feature in sorted_features:
-        feature_name = feature.name or feature.filename
-        items = getattr(feature, "run_items", None) or feature.scenarios
+        feature_name = str(getattr(feature, "name", None) or getattr(feature, "filename", ""))
+        feature_tags = getattr(feature, "tags", None) or []
+        items = getattr(feature, "run_items", None) or getattr(feature, "scenarios", None) or []
         for item in items:
             if hasattr(item, "run_items"):
-                rule_tags: list[str] = getattr(item, "tags", [])
+                rule_tags: list[str] = getattr(item, "tags", None) or []
                 inner_items: Any = getattr(item, "run_items", None) or getattr(
                     item, "scenarios", []
                 )
                 for scenario in inner_items:
-                    _map_scenario(state, scenario, feature.tags, feature_name, config, rule_tags)
+                    _map_scenario(state, scenario, feature_tags, feature_name, config, rule_tags)
             else:
-                _map_scenario(state, item, feature.tags, feature_name, config)
+                _map_scenario(state, item, feature_tags, feature_name, config)
 
     context._priority_state = state
 
@@ -282,7 +313,9 @@ def setup_priority(
         if coordinator is not None:
             state.coordinator = coordinator
             context._priority_coordinator = coordinator
-        else:
+        elif get_coord_dir() is None:
+            # create_coordinator() already warns when the dir is set
+            # but unusable; only warn here when it is missing entirely.
             warnings.warn(
                 "parallel_coord=True but BEHAVE_PRIORITY_COORD_DIR "
                 "env var is not set. Cross-process coordination "
@@ -311,9 +344,9 @@ def before_scenario_hook(context: Any, scenario: Any) -> None:
         state.should_stop = state.check_fail_fast()
 
     if state.should_stop:
-        state.skipped_count += 1
-        if hasattr(scenario, "skip"):
+        if callable(getattr(scenario, "skip", None)):
             scenario.skip("fail-fast triggered")
+            state.skipped_count += 1
         elif not state.missing_skip_warned:
             state.missing_skip_warned = True
             warnings.warn(
@@ -348,8 +381,8 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
 
     rule_tags = state.rule_tag_map.get(key, [])
     feature_tags = state.feature_tag_map.get(key, [])
-    scenario_tags = getattr(scenario, "tags", [])
-    combined_tags = list(scenario_tags) + rule_tags + feature_tags
+    scenario_tags = getattr(scenario, "tags", None) or []
+    combined_tags = list(scenario_tags) + list(rule_tags) + list(feature_tags)
     is_crit = is_critical(combined_tags, state.config.critical_tag)
 
     state.report.record(
@@ -361,20 +394,23 @@ def after_scenario_hook(context: Any, scenario: Any) -> None:
         is_critical=is_crit,
     )
 
+    # should_stop is a sticky latch: once fail-fast triggers it must not
+    # un-trigger, even if the aggregated global state transiently shrinks
+    # (e.g. a finished worker already removed its coordination file).
     if status == "skipped":
-        state.should_stop = state.check_fail_fast()
+        state.should_stop = state.should_stop or state.check_fail_fast()
         return
 
     state.executed_count += 1
 
-    if status == "failed":
+    if status in _FAILURE_STATUSES:
         state.failed_count += 1
         if is_crit:
             state.critical_failed = True
         if state.coordinator is not None:
             state.coordinator.report_failure(is_critical=is_crit)
 
-    state.should_stop = state.check_fail_fast()
+    state.should_stop = state.should_stop or state.check_fail_fast()
 
 
 def get_report(context: Any) -> PriorityReport | None:

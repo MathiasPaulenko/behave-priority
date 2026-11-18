@@ -189,3 +189,250 @@ class TestCleanupCoordinator:
         assert data["failed_count"] == 0
         assert data["critical_failed"] is False
         coord.cleanup()
+
+
+class TestWorkerFileValidation:
+    """Regression tests: malformed-but-valid-JSON worker files must be
+    ignored rather than crash or corrupt the aggregation."""
+
+    def test_ignores_wrong_type_failed_count(self, tmp_path: Path) -> None:
+        # Previously crashed with TypeError on 'int + str'.
+        (tmp_path / "worker_bad.json").write_text(
+            json.dumps({"failed_count": "x", "critical_failed": False, "created_at": 1.0})
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_ignores_bool_failed_count(self, tmp_path: Path) -> None:
+        (tmp_path / "worker_bad.json").write_text(
+            json.dumps({"failed_count": True, "critical_failed": False, "created_at": 1.0})
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_ignores_non_dict_json(self, tmp_path: Path) -> None:
+        (tmp_path / "worker_bad.json").write_text("[1, 2, 3]")
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_ignores_nan_created_at(self, tmp_path: Path) -> None:
+        # NaN passes isinstance(float) but every comparison with it is
+        # False, so it previously bypassed the stale-file filter.
+        (tmp_path / "worker_bad.json").write_text(
+            '{"failed_count": 5, "critical_failed": true, "created_at": NaN}'
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_ignores_infinite_created_at(self, tmp_path: Path) -> None:
+        (tmp_path / "worker_bad.json").write_text(
+            '{"failed_count": 5, "critical_failed": true, "created_at": Infinity}'
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_negative_failed_count_cannot_mask_failures(self, tmp_path: Path) -> None:
+        # A negative failed_count would lower the global sum and mask
+        # real failures from other workers.
+        import time
+
+        (tmp_path / "worker_bad.json").write_text(
+            json.dumps(
+                {
+                    "failed_count": -10,
+                    "critical_failed": False,
+                    "created_at": time.time(),
+                }
+            )
+        )
+        other = ParallelCoordinator(tmp_path, worker_id="w2")
+        other.report_failure()
+        other.report_failure()
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=2, stop_on_critical=False) is True
+        coord.cleanup()
+        other.cleanup()
+
+    def test_ignores_missing_required_fields(self, tmp_path: Path) -> None:
+        (tmp_path / "worker_bad.json").write_text(json.dumps({"created_at": 1.0}))
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_ignores_non_bool_critical_failed(self, tmp_path: Path) -> None:
+        (tmp_path / "worker_bad.json").write_text(
+            json.dumps({"failed_count": 0, "critical_failed": "yes", "created_at": 1.0})
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+    def test_ignores_huge_int_fields(self, tmp_path: Path) -> None:
+        # Regression: math.isfinite() raises OverflowError on ints too
+        # large to convert to float, which crashed should_stop().
+        huge = "1" * 400
+        (tmp_path / "worker_bad.json").write_text(
+            '{"failed_count": 5, "critical_failed": true, "created_at": ' + huge + "}"
+        )
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+
+        (tmp_path / "worker_bad.json").write_text(
+            '{"failed_count": ' + huge + ', "critical_failed": true, "created_at": 1.0}'
+        )
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+        coord.cleanup()
+
+
+class TestWorkerIdValidation:
+    """Regression tests: worker_id is interpolated into a filename and
+    must not allow escaping the coordination directory."""
+
+    def test_rejects_path_traversal(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="worker_id"):
+            ParallelCoordinator(tmp_path, worker_id="a/../../evil")
+
+    def test_rejects_forward_slash(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="worker_id"):
+            ParallelCoordinator(tmp_path, worker_id="sub/dir")
+
+    def test_rejects_backslash(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="worker_id"):
+            ParallelCoordinator(tmp_path, worker_id="a\b")
+
+    def test_rejects_null_byte(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="worker_id"):
+            ParallelCoordinator(tmp_path, worker_id="a\x00b")
+
+    def test_rejects_spaces_and_special_chars(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="worker_id"):
+            ParallelCoordinator(tmp_path, worker_id="a b$c")
+
+    def test_accepts_safe_characters(self, tmp_path: Path) -> None:
+        coord = ParallelCoordinator(tmp_path, worker_id="Worker-1.x_2")
+        assert (tmp_path / "worker_Worker-1.x_2.json").exists()
+        coord.cleanup()
+
+    def test_empty_worker_id_defaults_to_pid(self, tmp_path: Path) -> None:
+        coord = ParallelCoordinator(tmp_path, worker_id="")
+        assert coord.worker_id == str(os.getpid())
+        coord.cleanup()
+
+    def test_non_string_worker_id_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="worker_id"):
+            ParallelCoordinator(tmp_path, worker_id=123)  # type: ignore[arg-type]
+
+
+class TestCoordDirValidation:
+    def test_empty_coord_dir_raises(self) -> None:
+        # Path('') resolves to '.', which would silently write worker
+        # files into the current working directory.
+        with pytest.raises(ValueError, match="coord_dir"):
+            ParallelCoordinator("")
+
+    def test_whitespace_coord_dir_raises(self) -> None:
+        with pytest.raises(ValueError, match="coord_dir"):
+            ParallelCoordinator("   ")
+
+
+class TestCoordDirHandling:
+    """Regression tests for unusable coordination directories."""
+
+    def test_create_coordinator_empty_env_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", "")
+        assert create_coordinator() is None
+        assert get_coord_dir() is None
+
+    def test_create_coordinator_whitespace_env_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", "   ")
+        assert create_coordinator() is None
+        assert get_coord_dir() is None
+
+    def test_get_coord_dir_strips_whitespace(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", f"  {tmp_path}  ")
+        assert get_coord_dir() == str(tmp_path)
+
+    def test_create_coordinator_dir_is_file_warns(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        blocker = tmp_path / "notadir"
+        blocker.write_text("x")
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", str(blocker))
+        with pytest.warns(RuntimeWarning, match="not usable"):
+            assert create_coordinator() is None
+
+
+class TestWriteResilience:
+    """Regression tests for write/read failure handling."""
+
+    def test_report_failure_warns_instead_of_crashing(self, tmp_path: Path) -> None:
+        import shutil
+
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        shutil.rmtree(tmp_path)
+        with pytest.warns(RuntimeWarning, match="cannot write"):
+            coord.report_failure()
+        # A second failure does not warn again.
+        coord.report_failure()
+
+    def test_should_stop_with_missing_dir_returns_false(self, tmp_path: Path) -> None:
+        import shutil
+
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        shutil.rmtree(tmp_path)
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+
+    def test_should_stop_tolerates_glob_oserror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+
+        def bad_glob(self: Path, pattern: str) -> list[Path]:
+            raise OSError("unreadable")
+
+        monkeypatch.setattr(Path, "glob", bad_glob)
+        assert coord.should_stop(stop_after_failures=1, stop_on_critical=True) is False
+
+    def test_write_retries_transient_replace_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        real_replace = Path.replace
+        calls = {"n": 0}
+
+        def flaky(self: Path, target: Path) -> Path:
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise OSError("transient lock")
+            return real_replace(self, target)
+
+        monkeypatch.setattr(Path, "replace", flaky)
+        ParallelCoordinator(tmp_path, worker_id="w1")
+        assert (tmp_path / "worker_w1.json").exists()
+
+    def test_write_state_raises_after_retry_exhaustion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def always_fail(self: Path, target: Path) -> Path:
+            raise OSError("locked")
+
+        monkeypatch.setattr(Path, "replace", always_fail)
+        with pytest.raises(OSError, match="locked"):
+            ParallelCoordinator(tmp_path, worker_id="w1")
+
+    def test_cleanup_removes_leftover_tmp_file(self, tmp_path: Path) -> None:
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        (tmp_path / "worker_w1.tmp").write_text("junk")
+        coord.cleanup()
+        assert not (tmp_path / "worker_w1.json").exists()
+        assert not (tmp_path / "worker_w1.tmp").exists()

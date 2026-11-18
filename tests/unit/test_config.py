@@ -163,6 +163,70 @@ class TestValidation:
         with pytest.raises(ValueError, match="stop_after_failures"):
             PriorityConfig(stop_after_failures=True)  # type: ignore[arg-type]
 
+    def test_default_priority_bool_raises(self) -> None:
+        # bool is an int subclass; it must be rejected explicitly.
+        with pytest.raises(ValueError, match="default_priority"):
+            PriorityConfig(default_priority=True)  # type: ignore[arg-type]
+
+    def test_default_priority_float_raises(self) -> None:
+        with pytest.raises(ValueError, match="default_priority"):
+            PriorityConfig(default_priority=1.5)  # type: ignore[arg-type]
+
+    def test_default_priority_str_raises_value_error(self) -> None:
+        # Previously raised a bare TypeError from the '< 0' comparison.
+        with pytest.raises(ValueError, match="default_priority"):
+            PriorityConfig(default_priority="abc")  # type: ignore[arg-type]
+
+    def test_critical_tag_whitespace_only_raises(self) -> None:
+        # '   ' normalizes to an empty tag that could never match.
+        with pytest.raises(ValueError, match="critical_tag"):
+            PriorityConfig(critical_tag="   ")
+
+    def test_critical_tag_at_only_raises(self) -> None:
+        with pytest.raises(ValueError, match="critical_tag"):
+            PriorityConfig(critical_tag="@")
+
+    def test_critical_tag_at_and_whitespace_raises(self) -> None:
+        with pytest.raises(ValueError, match="critical_tag"):
+            PriorityConfig(critical_tag=" @ ")
+
+    def test_critical_tag_non_string_raises(self) -> None:
+        with pytest.raises(ValueError, match="critical_tag"):
+            PriorityConfig(critical_tag=5)  # type: ignore[arg-type]
+
+    def test_priority_tag_whitespace_only_raises(self) -> None:
+        with pytest.raises(ValueError, match="priority_tag"):
+            PriorityConfig(priority_tag="   ")
+
+    def test_priority_tag_at_only_raises(self) -> None:
+        with pytest.raises(ValueError, match="priority_tag"):
+            PriorityConfig(priority_tag="@")
+
+    def test_priority_tag_non_string_raises(self) -> None:
+        with pytest.raises(ValueError, match="priority_tag"):
+            PriorityConfig(priority_tag=5)  # type: ignore[arg-type]
+
+    def test_tags_with_at_prefix_still_allowed(self) -> None:
+        config = PriorityConfig(critical_tag="@critical", priority_tag="@smoke")
+        assert config.critical_tag == "@critical"
+        assert config.priority_tag == "@smoke"
+
+    @pytest.mark.parametrize(
+        "flag",
+        ["order", "reverse", "stop_on_critical", "report", "parallel_coord"],
+    )
+    def test_bool_fields_reject_non_bool(self, flag: str) -> None:
+        with pytest.raises(ValueError, match=flag):
+            PriorityConfig(**{flag: "yes"})  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize(
+        "flag",
+        ["order", "reverse", "stop_on_critical", "report", "parallel_coord"],
+    )
+    def test_bool_fields_reject_int(self, flag: str) -> None:
+        with pytest.raises(ValueError, match=flag):
+            PriorityConfig(**{flag: 1})  # type: ignore[arg-type]
+
 
 class TestImmutability:
     def test_frozen_setattr_raises(self) -> None:

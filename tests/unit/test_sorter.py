@@ -471,6 +471,27 @@ class TestSortWithAtPrefix:
         sorter.sort([feature])
         assert feature.scenarios[0] == s2
 
+    def test_leading_space_before_at_prefix(self) -> None:
+        # Regression: normalization stripped whitespace after removing
+        # '@', so ' @smoke' never matched the priority tag.
+        config = PriorityConfig(priority_tag="smoke")
+        sorter = ScenarioSorter(config)
+        s1 = FakeScenario("normal")
+        s2 = FakeScenario("smoke", tags=[" @smoke"])
+        feature = make_feature("F", scenarios=[s1, s2])
+        sorter.sort([feature])
+        assert feature.scenarios[0] == s2
+
+    def test_leading_space_in_feature_tags(self) -> None:
+        config = PriorityConfig(priority_tag="smoke")
+        sorter = ScenarioSorter(config)
+        assert sorter._sort_key([], [" @smoke"]) == (0, 999)
+
+    def test_leading_space_in_rule_tags(self) -> None:
+        config = PriorityConfig(priority_tag="smoke")
+        sorter = ScenarioSorter(config)
+        assert sorter._sort_key([], [], [" @smoke"]) == (0, 999)
+
 
 class TestRealWorldScenarios:
     def test_multiple_features_mixed_priorities(self) -> None:
@@ -726,3 +747,17 @@ class TestRuleSupport:
         items = feature.run_items or []
         assert items[0] is rule
         assert items[1] is plain
+
+    def test_rule_without_scenarios_attribute(self) -> None:
+        # Regression: _run_item_sort_key accessed item.scenarios
+        # unconditionally when run_items was empty, crashing on
+        # rule-like objects lacking that attribute.
+        config = PriorityConfig(order=True)
+        sorter = ScenarioSorter(config)
+
+        class MinimalRule:
+            tags: list[str] = []
+            run_items: list[Any] = []
+
+        feature = FakeFeature("F", "f.feature", run_items=[MinimalRule()])
+        sorter.sort([feature])

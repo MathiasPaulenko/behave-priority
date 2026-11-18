@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,7 @@ from behave_priority.hooks import (
     _scenario_key,
     after_scenario_hook,
     before_scenario_hook,
+    cleanup_parallel_coord,
     get_report,
     priority_report,
     setup_priority,
@@ -214,6 +216,114 @@ class TestSetupPriority:
         ctx = FakeContext(_runner=None, runner=runner)
         setup_priority(ctx)
         assert ctx._priority_state is not None
+
+    def test_non_mutable_features_replaced_with_sorted_list(self) -> None:
+        # Regression: 'features[:] = sorted' crashed with TypeError when
+        # the runner exposed a non-mutable sequence (e.g. a tuple).
+        s1 = FakeScenario("low", tags=["priority(3)"])
+        s2 = FakeScenario("high", tags=["priority(1)"])
+        feature = FakeFeature("F", "f.feature", scenarios=[s1, s2])
+        runner = FakeRunner()
+        runner.features = (feature,)  # type: ignore[assignment]
+        ctx = FakeContext(_runner=runner)
+        setup_priority(ctx, order=True)
+        assert isinstance(runner.features, list)
+        assert runner.features[0].scenarios == [s2, s1]
+        assert ctx._priority_state is not None
+
+    def test_scenario_without_tags_attribute(self) -> None:
+        # Regression: _map_scenario accessed scenario.tags directly.
+        class BareScenario:
+            name = "s"
+            filename = "f.feature"
+            line = 1
+
+        scenario = BareScenario()
+        feature = FakeFeature("F", "f.feature", scenarios=[scenario])  # type: ignore[list-item]
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        setup_priority(ctx)
+        state = ctx._priority_state
+        assert state.priority_map["f.feature:1"] == 999
+
+    def test_feature_missing_scenarios_attribute(self) -> None:
+        class BareFeature:
+            name = "F"
+            filename = "f.feature"
+            tags: list[str] = []
+
+        runner = FakeRunner()
+        runner.features = [BareFeature()]  # type: ignore[list-item]
+        ctx = FakeContext(_runner=runner)
+        setup_priority(ctx)
+        assert ctx._priority_state is not None
+
+    def test_readonly_features_attr_warns(self) -> None:
+        # Runner exposes a property returning a non-mutable sequence and
+        # no setter: the fallback setattr fails and must warn, not crash.
+        class Runner:
+            @property
+            def features(self) -> tuple:
+                return ()
+
+        ctx = FakeContext(_runner=Runner())
+        with pytest.warns(RuntimeWarning, match="not mutable"):
+            setup_priority(ctx, order=True)
+        assert ctx._priority_state is not None
+
+    def test_parallel_coord_without_env_warns(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BEHAVE_PRIORITY_COORD_DIR", raising=False)
+        runner = FakeRunner(features=[])
+        ctx = FakeContext(_runner=runner)
+        with pytest.warns(RuntimeWarning, match="BEHAVE_PRIORITY_COORD_DIR"):
+            setup_priority(ctx, parallel_coord=True)
+        state = ctx._priority_state
+        assert state is not None
+        assert state.coordinator is None
+
+    def test_parallel_coord_unusable_dir_warns(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        blocker = tmp_path / "notadir"
+        blocker.write_text("x")
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", str(blocker))
+        runner = FakeRunner(features=[])
+        ctx = FakeContext(_runner=runner)
+        with pytest.warns(RuntimeWarning, match="not usable"):
+            setup_priority(ctx, parallel_coord=True)
+        state = ctx._priority_state
+        assert state is not None
+        assert state.coordinator is None
+
+    def test_parallel_coord_creates_coordinator(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", str(tmp_path))
+        runner = FakeRunner(features=[])
+        ctx = FakeContext(_runner=runner)
+        setup_priority(ctx, parallel_coord=True)
+        state = ctx._priority_state
+        assert state is not None
+        assert state.coordinator is not None
+        assert ctx._priority_coordinator is state.coordinator
+        state.coordinator.cleanup()
+
+    def test_scenario_outline_maps_each_expanded_example(self) -> None:
+        # Outline-like objects expose .scenarios with expanded examples;
+        # each example gets its own priority_map entry, the outline
+        # itself does not.
+        e1 = FakeScenario("example 1", tags=["priority(2)"], filename="f.feature", line=10)
+        e2 = FakeScenario("example 2", tags=["priority(1)"], filename="f.feature", line=11)
+        outline = FakeScenario("outline", filename="f.feature", line=5)
+        outline.scenarios = [e1, e2]  # type: ignore[attr-defined]
+        feature = FakeFeature("F", "f.feature", scenarios=[outline])
+        runner = FakeRunner(features=[feature])
+        ctx = FakeContext(_runner=runner)
+        setup_priority(ctx)
+        state = ctx._priority_state
+        assert state.priority_map["f.feature:10"] == 2
+        assert state.priority_map["f.feature:11"] == 1
+        assert "f.feature:5" not in state.priority_map
 
     def test_config_passed_through(self) -> None:
         s1 = FakeScenario("s1")
@@ -444,11 +554,13 @@ class TestBeforeScenarioHook:
         scenario = NoSkipScenario()
         with pytest.warns(RuntimeWarning, match="no 'skip' method"):
             before_scenario_hook(ctx, scenario)
-        assert state.skipped_count == 1
+        # The scenario cannot be marked as skipped, so it does not
+        # count toward skipped_count.
+        assert state.skipped_count == 0
         with warnings.catch_warnings():
             warnings.simplefilter("error")
             before_scenario_hook(ctx, scenario)
-        assert state.skipped_count == 2
+        assert state.skipped_count == 0
 
     def test_skipped_records_feature_name(self) -> None:
         state = make_state()
@@ -599,6 +711,108 @@ class TestAfterScenarioHook:
         assert state.failed_count == 0
         assert state.executed_count == 0
         assert state.should_stop is False
+
+    @pytest.mark.parametrize(
+        "status",
+        ["error", "hook_error", "cleanup_error", "undefined", "pending"],
+    )
+    def test_error_statuses_count_as_failures(self, status: str) -> None:
+        # Regression: behave reports hook/cleanup/undefined errors with
+        # these statuses; counting only 'failed' let a broken suite run
+        # to completion without triggering fail-fast.
+        state = make_state(PriorityConfig(stop_after_failures=1))
+        ctx = FakeContext(_priority_state=state)
+        scenario = FakeScenario("s", status=status)
+        after_scenario_hook(ctx, scenario)
+        assert state.failed_count == 1
+        assert state.should_stop is True
+
+    @pytest.mark.parametrize(
+        "status",
+        ["passed", "skipped", "pending_warn", "untested", "executing"],
+    )
+    def test_non_failure_statuses_do_not_count(self, status: str) -> None:
+        state = make_state(PriorityConfig(stop_after_failures=1))
+        ctx = FakeContext(_priority_state=state)
+        scenario = FakeScenario("s", status=status)
+        after_scenario_hook(ctx, scenario)
+        assert state.failed_count == 0
+        assert state.should_stop is False
+
+    def test_cleanup_parallel_coord_removes_worker_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("BEHAVE_PRIORITY_COORD_DIR", str(tmp_path))
+        runner = FakeRunner(features=[])
+        ctx = FakeContext(_runner=runner)
+        setup_priority(ctx, parallel_coord=True)
+        worker_file = tmp_path / f"worker_{ctx._priority_coordinator.worker_id}.json"
+        assert worker_file.exists()
+        cleanup_parallel_coord(ctx)
+        assert not worker_file.exists()
+
+    def test_cleanup_parallel_coord_no_coordinator(self) -> None:
+        cleanup_parallel_coord(FakeContext())
+
+    def test_should_stop_is_sticky_when_global_state_shrinks(self, tmp_path: Path) -> None:
+        # Regression: once triggered, fail-fast must not un-trigger if a
+        # finished worker removes its coordination file and the global
+        # failure count drops.
+        from behave_priority.parallel import ParallelCoordinator
+
+        config = PriorityConfig(stop_after_failures=1, parallel_coord=True)
+        state = make_state(config)
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        other = ParallelCoordinator(tmp_path, worker_id="w2")
+        state.coordinator = coord
+        ctx = FakeContext(_priority_state=state)
+
+        other.report_failure()
+        after_scenario_hook(ctx, FakeScenario("s", status="passed"))
+        assert state.should_stop is True
+
+        other.cleanup()  # finished worker removes its evidence
+        after_scenario_hook(ctx, FakeScenario("s2", status="passed"))
+        assert state.should_stop is True
+        coord.cleanup()
+
+    def test_failure_reported_to_coordinator(self, tmp_path: Path) -> None:
+        from behave_priority.parallel import ParallelCoordinator
+
+        config = PriorityConfig(stop_after_failures=5, parallel_coord=True)
+        state = make_state(config)
+        coord = ParallelCoordinator(tmp_path, worker_id="w1")
+        state.coordinator = coord
+        ctx = FakeContext(_priority_state=state)
+        scenario = FakeScenario("s", status="failed")
+        after_scenario_hook(ctx, scenario)
+        data = json.loads((tmp_path / "worker_w1.json").read_text())
+        assert data["failed_count"] == 1
+        assert data["critical_failed"] is False
+        coord.cleanup()
+
+    def test_error_status_on_critical_triggers_stop(self) -> None:
+        state = make_state(PriorityConfig(stop_on_critical=True))
+        ctx = FakeContext(_priority_state=state)
+        scenario = FakeScenario("s", status="hook_error", tags=["critical"])
+        after_scenario_hook(ctx, scenario)
+        assert state.critical_failed is True
+        assert state.should_stop is True
+
+    def test_enum_status_name_resolved(self) -> None:
+        # Behave status is a Status enum; the .name attribute is used.
+        from enum import Enum
+
+        class Status(Enum):
+            failed = "failed"
+
+        state = make_state(PriorityConfig(stop_after_failures=1))
+        ctx = FakeContext(_priority_state=state)
+        scenario = FakeScenario("s")
+        scenario.status = Status.failed  # type: ignore[assignment]
+        after_scenario_hook(ctx, scenario)
+        assert state.failed_count == 1
+        assert state.should_stop is True
 
 
 class TestPriorityReportFunction:

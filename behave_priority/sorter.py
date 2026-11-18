@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
-from behave_priority.parser import resolve_priority
+from behave_priority.parser import _normalize_tag, resolve_priority
 
 if TYPE_CHECKING:
     from behave_priority.config import PriorityConfig
@@ -83,13 +83,14 @@ class ScenarioSorter:
             return features
 
         for feature in features:
-            sorted_scenarios = self._sort_scenarios(feature.scenarios, feature.tags)
-            feature.scenarios = sorted_scenarios
-
             feature_obj: Any = feature
+            feature_tags: list[str] = getattr(feature_obj, "tags", None) or []
+            scenarios = getattr(feature_obj, "scenarios", None) or []
+            feature_obj.scenarios = self._sort_scenarios(scenarios, feature_tags)
+
             run_items = getattr(feature_obj, "run_items", None)
             if run_items is not None:
-                sorted_items = self._sort_run_items(run_items, feature.tags)
+                sorted_items = self._sort_run_items(run_items, feature_tags)
                 feature_obj.run_items = sorted_items
 
         return sorted(features, key=self._feature_sort_key)
@@ -150,11 +151,16 @@ class ScenarioSorter:
         """
         if self._is_rule(item):
             rule_tags = getattr(item, "tags", [])
-            inner_items: Any = getattr(item, "run_items", None) or item.scenarios
+            inner_items: Any = (
+                getattr(item, "run_items", None) or getattr(item, "scenarios", None) or []
+            )
             if not inner_items:
                 return (1, self._config.default_priority)
-            return min(self._sort_key(s.tags, feature_tags, rule_tags) for s in inner_items)
-        return self._sort_key(item.tags, feature_tags)
+            return min(
+                self._sort_key(getattr(s, "tags", None) or [], feature_tags, rule_tags)
+                for s in inner_items
+            )
+        return self._sort_key(getattr(item, "tags", None) or [], feature_tags)
 
     def _sort_scenarios(
         self,
@@ -174,7 +180,7 @@ class ScenarioSorter:
         """
         return sorted(
             scenarios,
-            key=lambda s: self._sort_key(s.tags, feature_tags, rule_tags),
+            key=lambda s: self._sort_key(getattr(s, "tags", None) or [], feature_tags, rule_tags),
         )
 
     def _sort_key(
@@ -196,12 +202,12 @@ class ScenarioSorter:
         priority = resolve_priority(scenario_tags, feature_tags, self._config, rule_tags)
 
         if self._config.priority_tag:
-            tag = self._config.priority_tag.removeprefix("@")
+            tag = _normalize_tag(self._config.priority_tag)
             all_tags = list(scenario_tags)
             if rule_tags:
                 all_tags.extend(rule_tags)
             all_tags.extend(feature_tags)
-            normalized = {t.removeprefix("@").strip() for t in all_tags}
+            normalized = {_normalize_tag(t) for t in all_tags}
             primary = 0 if tag in normalized else 1
         else:
             primary = 0
@@ -221,11 +227,11 @@ class ScenarioSorter:
         Returns:
             A tuple of (primary, secondary) sort keys.
         """
+        feature_tags: list[str] = getattr(feature, "tags", None) or []
         items: Any = getattr(feature, "run_items", None)
         if items:
-            best = min(self._run_item_sort_key(item, feature.tags) for item in items)
-            return best
-        scenarios = feature.scenarios
+            return min(self._run_item_sort_key(item, feature_tags) for item in items)
+        scenarios = getattr(feature, "scenarios", None) or []
         if not scenarios:
             return (1, self._config.default_priority)
-        return min(self._sort_key(s.tags, feature.tags) for s in scenarios)
+        return min(self._sort_key(getattr(s, "tags", None) or [], feature_tags) for s in scenarios)

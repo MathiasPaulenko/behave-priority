@@ -5,11 +5,17 @@ from __future__ import annotations
 import csv
 import io
 import json
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from behave_priority.config import PriorityConfig
+
+# Statuses that behave maps to a failed run. They are counted as failed
+# in summaries so a suite with hook/cleanup/step errors is not reported
+# as "untested". "undefined" is excluded: it has its own counter.
+_ERROR_STATUSES = frozenset({"failed", "error", "hook_error", "cleanup_error", "pending"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,13 +48,13 @@ class ReportSummary:
     Attributes:
         total: Total number of recorded scenarios.
         passed: Number of passed scenarios.
-        failed: Number of failed scenarios.
+        failed: Number of failed or errored scenarios.
         skipped: Number of skipped scenarios.
         undefined: Number of undefined scenarios.
         untested: Number of scenarios with a status not matching any known category.
         critical_total: Total number of critical scenarios.
         critical_passed: Number of passed critical scenarios.
-        critical_failed: Number of failed critical scenarios.
+        critical_failed: Number of failed or errored critical scenarios.
         critical_skipped: Number of skipped critical scenarios.
         total_duration: Sum of all scenario durations in seconds.
         skipped_duration: Sum of skipped scenario durations in seconds.
@@ -92,7 +98,7 @@ class PriorityReport:
         Args:
             config: Configuration that controls report behavior.
         """
-        self._config = config
+        del config  # Reserved for future report-level settings.
         self._entries: list[ReportEntry] = []
 
     @property
@@ -123,15 +129,31 @@ class PriorityReport:
             status: Execution status (``"passed"``, ``"failed"``, etc.).
             duration: Execution time in seconds.
             is_critical: Whether the scenario has the critical tag.
+
+        Raises:
+            TypeError: If ``priority`` is not an integer.
         """
+        # A non-int priority would silently corrupt priority-bucketed
+        # estimates (``e.priority // _BUCKET_SIZE``) and JSON output.
+        if isinstance(priority, bool) or not isinstance(priority, int):
+            raise TypeError(f"priority must be an integer, got {priority!r}")
+        try:
+            clean_duration = float(duration)
+        except (TypeError, ValueError):
+            clean_duration = 0.0
+        # Non-finite or negative durations would corrupt aggregates and
+        # produce invalid JSON literals (NaN/Infinity) in to_json().
+        if not math.isfinite(clean_duration) or clean_duration < 0:
+            clean_duration = 0.0
+
         entry = ReportEntry(
             index=len(self._entries) + 1,
-            feature_name=feature_name,
-            scenario_name=scenario_name,
+            feature_name=feature_name if isinstance(feature_name, str) else str(feature_name),
+            scenario_name=scenario_name if isinstance(scenario_name, str) else str(scenario_name),
             priority=priority,
-            status=status,
-            duration=duration,
-            is_critical=is_critical,
+            status=status if isinstance(status, str) else str(status),
+            duration=clean_duration,
+            is_critical=bool(is_critical),
         )
         self._entries.append(entry)
 
@@ -246,16 +268,16 @@ class PriorityReport:
         """
         total = len(self._entries)
         passed = sum(1 for e in self._entries if e.status == "passed")
-        failed = sum(1 for e in self._entries if e.status == "failed")
+        failed = sum(1 for e in self._entries if e.status in _ERROR_STATUSES)
         skipped = sum(1 for e in self._entries if e.status == "skipped")
         undefined = sum(1 for e in self._entries if e.status == "undefined")
-        known = {"passed", "failed", "skipped", "undefined"}
+        known = _ERROR_STATUSES | {"passed", "skipped", "undefined"}
         untested = sum(1 for e in self._entries if e.status not in known)
 
         critical_entries = [e for e in self._entries if e.is_critical]
         critical_total = len(critical_entries)
         critical_passed = sum(1 for e in critical_entries if e.status == "passed")
-        critical_failed = sum(1 for e in critical_entries if e.status == "failed")
+        critical_failed = sum(1 for e in critical_entries if e.status in _ERROR_STATUSES)
         critical_skipped = sum(1 for e in critical_entries if e.status == "skipped")
 
         total_duration = sum(e.duration for e in self._entries)

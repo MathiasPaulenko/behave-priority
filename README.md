@@ -2,7 +2,7 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-409%20passed-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-512%20passed-brightgreen.svg)]()
 [![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen.svg)]()
 [![mypy: strict](https://img.shields.io/badge/mypy-strict-blue.svg)]()
 [![ruff](https://img.shields.io/badge/ruff-passing-brightgreen.svg)]()
@@ -42,7 +42,7 @@ In CI, if critical tests fail, you waste time waiting for the full regression su
 
 ### Fail-fast
 
-- `stop_after_failures=N` — stops execution after N failed scenarios
+- `stop_after_failures=N` — stops execution after N failed or errored scenarios
 - `stop_on_critical=True` — stops if any `@critical` scenario fails
 - `@critical` also works at `Feature` and `Rule` level, marking all scenarios inside
 - Combines with `order=True`: run critical first, stop if they fail, skip regression
@@ -176,7 +176,7 @@ Configuration can be passed explicitly or via environment variables when argumen
 | `order` | `bool \| None` | `None` (`False`) | Sort scenarios by priority | `BEHAVE_PRIORITY_ORDER` (0/1) |
 | `reverse` | `bool \| None` | `None` (`False`) | Reverse sort order (lowest priority first) | `BEHAVE_PRIORITY_REVERSE` (0/1) |
 | `priority_tag` | `str \| None` | `None` | Tag name to run first (e.g. `"smoke"`) | — |
-| `stop_after_failures` | `int \| None` | `None` (disabled) | Stop after N failures | `BEHAVE_PRIORITY_STOP_AFTER` |
+| `stop_after_failures` | `int \| None` | `None` (disabled) | Stop after N failed or errored scenarios | `BEHAVE_PRIORITY_STOP_AFTER` |
 | `stop_on_critical` | `bool \| None` | `None` (`False`) | Stop if any `@critical` scenario fails | `BEHAVE_PRIORITY_FAIL_FAST` (0/1) |
 | `critical_tag` | `str` | `"critical"` | Tag name for critical scenarios | — |
 | `default_priority` | `int` | `999` | Priority for untagged scenarios | — |
